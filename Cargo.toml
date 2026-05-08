@@ -5,6 +5,7 @@ edition = "2024"
 rust-version = "1.95"
 description = "A small wc-style command line tool"
 license = "MIT"
+include = ["Cargo.lock", "Cargo.toml", "LICENSE", "README.md", "src/**/*", "tests/**/*"]
 
 [dependencies]
 bytesize = "2"

@@ -35,7 +35,7 @@ jobs:
       - name: Clippy
         run: just clippy
 
-  rustfmt:
+  docs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -44,24 +44,15 @@ jobs:
         uses: actions-rust-lang/setup-rust-toolchain@2b1f5e9b395427c92ee4e3331786ca3c37afe2d7 # v1.16.0
         with:
           toolchain: nightly
-          components: rustfmt
-
-      - run: cargo fmt -- --check
-
-  docs:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-
-      - name: Install Rust
-        uses: actions-rust-lang/setup-rust-toolchain@2b1f5e9b395427c92ee4e3331786ca3c37afe2d7 # v1.16.0
-        with:
           components: rust-docs
 
-      - name: Check for broken intra-doc links
-        env:
-          RUSTDOCFLAGS: -D warnings
-        run: cargo doc --workspace --no-deps --all-features
+      - name: Install just
+        uses: taiki-e/install-action@7769b73c2ec98c38dfcf2e18c83cfd4880c038c1 # v2.75.27
+        with:
+          tool: just
+
+      - name: Check documentation
+        run: just doc
 
   project-format:
     runs-on: ubuntu-latest
@@ -69,14 +60,21 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Install Nix
-        uses: cachix/install-nix-action@v31.8.4
+        uses: cachix/install-nix-action@0b0e072294b088b73964f1d72dfdac0951439dbd # v31.8.4
         with:
           github_access_token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Check project formatting
-        run: |
-          nix develop -c just --unstable --fmt --check
-          nix develop -c fd --type=file --hidden --extension=nix --exec-batch nixfmt --check
-          nix develop -c fd --type=file --hidden --extension=md --extension=yml --exec-batch prettier --check
-          nix develop -c fd --hidden --extension=toml --exec-batch taplo format --check
-          nix develop -c fd --hidden --extension=toml --exec-batch taplo lint
+      - name: Install Rust (nightly)
+        uses: actions-rust-lang/setup-rust-toolchain@2b1f5e9b395427c92ee4e3331786ca3c37afe2d7 # v1.16.0
+        with:
+          toolchain: nightly
+          components: clippy,rustfmt
+
+      - name: Enter Nix devshell
+        uses: nicknovitski/nix-develop@9be7cfb4b10451d3390a75dc18ad0465bed4932a # v1.2.1
+
+      - name: Format project
+        run: just fmt
+
+      - name: Check formatting diff
+        run: git diff --exit-code

@@ -11,6 +11,10 @@ xwc *args:
 clippy:
     cargo clippy --workspace --all-targets -- -D warnings
 
+# Check Rust formatting
+fmt-rust-check:
+    cargo +nightly fmt -- --check
+
 # Test workspace
 test:
     cargo nextest run --workspace --all-features
@@ -38,8 +42,8 @@ check:
     fd --type=file --hidden --extension=md --extension=yml --exec-batch prettier --check
     fd --hidden --extension=toml --exec-batch taplo format --check
     fd --hidden --extension=toml --exec-batch taplo lint
-    cargo +nightly fmt -- --check
-    cargo clippy --workspace --all-targets -- -D warnings
+    just fmt-rust-check
+    just clippy
     cargo machete --with-metadata
 
 # Format project
