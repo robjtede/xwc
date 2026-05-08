@@ -37,7 +37,7 @@ jobs:
           toolchain: ${{ matrix.version.version }}
 
       - name: Install just, nextest
-        uses: taiki-e/install-action@7769b73c2ec98c38dfcf2e18c83cfd4880c038c1 # v2.75.27
+        uses: taiki-e/install-action@3fa6878dc4ae603f73960271565a082bf196ab96 # v2.77.2
         with:
           tool: just,nextest
 
@@ -45,7 +45,7 @@ jobs:
         run: just test
 
       - name: Install cargo-ci-cache-clean
-        uses: taiki-e/install-action@7769b73c2ec98c38dfcf2e18c83cfd4880c038c1 # v2.75.27
+        uses: taiki-e/install-action@3fa6878dc4ae603f73960271565a082bf196ab96 # v2.77.2
         with:
           tool: cargo-ci-cache-clean
 
