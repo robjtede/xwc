@@ -20,7 +20,8 @@ struct Config {
 #[derive(Debug, Parser)]
 #[command(
     name = "vwc",
-    about = "Count lines and bytes for each FILE, or standard input when no FILE is given."
+    about = "Count lines and bytes for each FILE, or standard input when no FILE is given.",
+    disable_help_flag = true
 )]
 struct Cli {
     #[arg(short = 'l', long = "lines", help = "Print the newline count")]
@@ -29,14 +30,21 @@ struct Cli {
     #[arg(short = 'w', long = "words", help = "Print the word count")]
     words: bool,
 
+    #[arg(short = 'W', long = "include-words", help = "Include the word count")]
+    include_words: bool,
+
     #[arg(short = 'c', long = "bytes", help = "Print the byte count")]
     bytes: bool,
 
     #[arg(
+        short = 'h',
         long = "human-readable",
         help = "Print byte counts in human-readable IEC units"
     )]
     human_readable: bool,
+
+    #[arg(long = "help", action = clap::ArgAction::Help, help = "Print help")]
+    help: Option<bool>,
 
     #[arg(value_name = "FILE")]
     files: Vec<String>,
@@ -71,7 +79,7 @@ impl Cli {
 
         Config {
             show_lines: self.lines || !has_count_option,
-            show_words: self.words,
+            show_words: self.words || self.include_words,
             show_bytes: self.bytes || !has_count_option,
             show_headings: !has_count_option,
             human_readable: self.human_readable,
@@ -251,7 +259,7 @@ fn headings(config: &Config, has_labels: bool) -> Vec<String> {
     }
 
     if config.show_bytes {
-        fields.push("bytes".to_owned());
+        fields.push("size".to_owned());
     }
 
     if has_labels {
@@ -299,7 +307,7 @@ fn column_widths(rows: &[Vec<String>]) -> Vec<usize> {
 fn print_row(row: &[String], widths: &[usize]) {
     for (index, field) in row.iter().enumerate() {
         if index > 0 {
-            print!(" ");
+            print!("  ");
         }
 
         if index + 1 == row.len() {
@@ -364,6 +372,23 @@ mod tests {
                 show_headings: false,
                 human_readable: true,
                 files: vec!["a".to_owned(), "b".to_owned()]
+            }
+        );
+    }
+
+    #[test]
+    fn include_words_adds_words_to_default_columns() {
+        let config = Cli::try_parse_from(["vwc", "-W"]).unwrap().into_config();
+
+        assert_eq!(
+            config,
+            Config {
+                show_lines: true,
+                show_words: true,
+                show_bytes: true,
+                show_headings: true,
+                human_readable: false,
+                files: Vec::new()
             }
         );
     }
