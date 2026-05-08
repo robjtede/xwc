@@ -25,11 +25,13 @@ jobs:
 
       - name: Approve patch and minor updates
         if: ${{ steps.dependabot-metadata.outputs.update-type == 'version-update:semver-patch'|| steps.dependabot-metadata.outputs.update-type == 'version-update:semver-minor'}}
+        continue-on-error: true
         run: |
           gh pr review "$PR_URL" --approve --body "I'm **approving** this pull request because **it only includes patch or minor updates**."
 
       - name: Approve major updates of dev dependencies
         if: ${{ steps.dependabot-metadata.outputs.update-type == 'version-update:semver-major' && steps.dependabot-metadata.outputs.dependency-type == 'direct:development'}}
+        continue-on-error: true
         run: |
           gh pr review "$PR_URL" --approve --body "I'm **approving** this pull request because **it only includes major updates of dev dependencies**."
 
