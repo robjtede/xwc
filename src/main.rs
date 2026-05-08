@@ -1,6 +1,8 @@
-use std::fs::File;
-use std::io::{self, BufReader, Read};
-use std::process::ExitCode;
+use std::{
+    fs::File,
+    io::{self, BufReader, Read},
+    process::ExitCode,
+};
 
 use bytesize::ByteSize;
 use clap::Parser;

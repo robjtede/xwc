@@ -1,0 +1,15 @@
+version: "0.2"
+words:
+  - bytesize
+  - clippy
+  - codecov
+  - docsrs
+  - msrv
+  - nextest
+  - nixpkgs
+  - pkgs
+  - rustc
+  - rustdoc
+  - rustup
+  - taplo
+  - vwc
