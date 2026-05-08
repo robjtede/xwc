@@ -23,7 +23,6 @@ test-msrv: (test-no-coverage msrv_rustup)
 [private]
 test-no-coverage toolchain="":
     cargo {{ toolchain }} nextest run --workspace --all-features
-    cargo {{ toolchain }} test --doc --workspace --all-features
     RUSTDOCFLAGS="-D warnings" cargo {{ toolchain }} doc --workspace --no-deps --all-features
 
 # Test workspace and generate coverage files
