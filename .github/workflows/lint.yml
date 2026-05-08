@@ -76,7 +76,7 @@ jobs:
       - name: Check project formatting
         run: |
           nix develop -c just --unstable --fmt --check
-          nix develop -c nixpkgs-fmt --check .
+          nix develop -c fd --type=file --hidden --extension=nix --exec-batch nixfmt --check
           nix develop -c fd --type=file --hidden --extension=md --extension=yml --exec-batch prettier --check
           nix develop -c fd --hidden --extension=toml --exec-batch taplo format --check
           nix develop -c fd --hidden --extension=toml --exec-batch taplo lint

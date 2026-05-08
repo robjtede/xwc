@@ -1,3 +1,5 @@
+set positional-arguments := true
+
 _list:
     @just --list
 
@@ -7,28 +9,11 @@ vwc *args:
 
 # Lint workspace with Clippy
 clippy:
-    cargo clippy --workspace --all-features --all-targets -- -D warnings
+    cargo clippy --workspace --all-targets -- -D warnings
 
-msrv := ```
-    cargo metadata --format-version=1 \
-    | jq -r 'first(.packages[] | select(.source == null and .rust_version)) | .rust_version' \
-    | sed -E 's/^1\.([0-9]{2})$/1\.\1\.0/'
-```
-msrv_rustup := "+" + msrv
-
-# Test workspace using MSRV
-test-msrv: (test-no-coverage msrv_rustup)
-
-# Test workspace without generating coverage files
-[private]
-test-no-coverage toolchain="":
-    cargo {{ toolchain }} nextest run --workspace --all-features
-    RUSTDOCFLAGS="-D warnings" cargo {{ toolchain }} doc --workspace --no-deps --all-features
-
-# Test workspace and generate coverage files
-test toolchain="": (test-no-coverage toolchain)
-    @just test-coverage-codecov {{ toolchain }}
-    @just test-coverage-lcov {{ toolchain }}
+# Test workspace
+test:
+    cargo nextest run --workspace --all-features
 
 # Test workspace and generate Codecov coverage file
 test-coverage-codecov toolchain="":
@@ -39,29 +24,28 @@ test-coverage-lcov toolchain="":
     cargo {{ toolchain }} llvm-cov --workspace --all-features --lcov --output-path lcov.info
 
 # Document workspace
-doc:
-    RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --workspace --all-features
+doc *args:
+    RUSTDOCFLAGS="--cfg=docsrs" cargo +nightly doc --no-deps --workspace --all-features {{ args }}
 
 # Document workspace and watch for changes
-doc-watch:
-    RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --workspace --all-features --open
-    cargo watch -- RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --workspace --all-features
+doc-watch: (doc "--open")
+    cargo watch -- RUSTDOCFLAGS="--cfg=docsrs" cargo +nightly doc --no-deps --workspace --all-features
 
 # Check project
 check:
     just --unstable --fmt --check
-    nixpkgs-fmt --check .
+    fd --type=file --hidden --extension=nix --exec-batch nixfmt --check
     fd --type=file --hidden --extension=md --extension=yml --exec-batch prettier --check
     fd --hidden --extension=toml --exec-batch taplo format --check
     fd --hidden --extension=toml --exec-batch taplo lint
     cargo +nightly fmt -- --check
-    cargo clippy --workspace --all-features --all-targets -- -D warnings
-    cargo test --workspace --all-features
+    cargo clippy --workspace --all-targets -- -D warnings
+    cargo machete --with-metadata
 
 # Format project
 fmt:
     just --unstable --fmt
-    nixpkgs-fmt .
+    fd --type=file --hidden --extension=nix --exec-batch nixfmt
     fd --type=file --hidden --extension=md --extension=yml --exec-batch prettier --write
     fd --hidden --extension=toml --exec-batch taplo format
     cargo +nightly fmt

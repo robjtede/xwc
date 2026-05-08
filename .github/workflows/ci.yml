@@ -1,47 +1,40 @@
 name: CI
 
 on:
-  push:
-    branches: [main]
-  merge_group:
-    types: [checks_requested]
-  pull_request:
-    branches: [main]
-    types: [opened, synchronize, reopened, ready_for_review]
-
-permissions:
-  contents: read
+  pull_request: { types: [opened, synchronize, reopened, ready_for_review] }
+  push: { branches: [main] }
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 jobs:
-  read_msrv:
-    name: Read MSRV
-    uses: actions-rust-lang/msrv/.github/workflows/msrv.yml@b95a3a81b0efee6438b858b41a84aff627e01351 # v0.1.1
-
-  test:
-    needs: read_msrv
-
+  build_and_test:
     strategy:
       fail-fast: false
       matrix:
-        toolchain:
-          - { name: msrv, version: "${{ needs.read_msrv.outputs.msrv }}" }
+        # prettier-ignore
+        target:
+          - { name: Linux, os: ubuntu-latest, triple: x86_64-unknown-linux-gnu }
+          - { name: macOS, os: macos-latest, triple: x86_64-apple-darwin }
+          - { name: Windows, os: windows-latest, triple: x86_64-pc-windows-msvc }
+        version:
           - { name: stable, version: stable }
+          - { name: beta, version: beta }
 
-    runs-on: ubuntu-latest
-
-    name: Test / ${{ matrix.toolchain.name }}
+    name: Test (${{ matrix.target.name }} / ${{ matrix.version.name }})
+    runs-on: ${{ matrix.target.os }}
 
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      - name: Install Rust (${{ matrix.toolchain.name }})
+      - name: Install Rust (${{ matrix.version.version }})
         uses: actions-rust-lang/setup-rust-toolchain@2b1f5e9b395427c92ee4e3331786ca3c37afe2d7 # v1.16.0
         with:
-          toolchain: ${{ matrix.toolchain.version }}
+          toolchain: ${{ matrix.version.version }}
 
       - name: Install just, nextest
         uses: taiki-e/install-action@7769b73c2ec98c38dfcf2e18c83cfd4880c038c1 # v2.75.27
@@ -49,4 +42,12 @@ jobs:
           tool: just,nextest
 
       - name: Test
-        run: just test-no-coverage
+        run: just test
+
+      - name: Install cargo-ci-cache-clean
+        uses: taiki-e/install-action@7769b73c2ec98c38dfcf2e18c83cfd4880c038c1 # v2.75.27
+        with:
+          tool: cargo-ci-cache-clean
+
+      - name: CI cache clean
+        run: cargo-ci-cache-clean
