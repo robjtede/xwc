@@ -6,3 +6,6 @@ edition = "2024"
 [dependencies]
 bytesize = "2"
 clap = { version = "4", features = ["derive"] }
+
+[dev-dependencies]
+assert_cmd = "2"

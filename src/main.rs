@@ -12,6 +12,7 @@ struct Config {
     show_lines: bool,
     show_words: bool,
     show_bytes: bool,
+    show_headings: bool,
     human_readable: bool,
     files: Vec<String>,
 }
@@ -72,6 +73,7 @@ impl Cli {
             show_lines: self.lines || !has_count_option,
             show_words: self.words,
             show_bytes: self.bytes || !has_count_option,
+            show_headings: !has_count_option,
             human_readable: self.human_readable,
             files: self.files,
         }
@@ -83,7 +85,7 @@ fn run(config: &Config) -> bool {
         let stdin = io::stdin();
         match count_reader(stdin.lock()) {
             Ok(counts) => {
-                print_counts(config, counts, None);
+                print_rows(config, vec![(counts, None)]);
                 return true;
             }
             Err(error) => {
@@ -95,12 +97,13 @@ fn run(config: &Config) -> bool {
 
     let mut total = Counts::default();
     let mut had_error = false;
+    let mut rows = Vec::new();
 
     for path in &config.files {
         match count_path(path) {
             Ok(counts) => {
                 total += counts;
-                print_counts(config, counts, Some(path));
+                rows.push((counts, Some(path.as_str())));
             }
             Err(error) => {
                 had_error = true;
@@ -110,8 +113,10 @@ fn run(config: &Config) -> bool {
     }
 
     if config.files.len() > 1 {
-        print_counts(config, total, Some("total"));
+        rows.push((total, Some("total")));
     }
+
+    print_rows(config, rows);
 
     !had_error
 }
@@ -215,7 +220,48 @@ fn count_words_in_str(input: &str, in_word: &mut bool) -> usize {
     words
 }
 
-fn print_counts(config: &Config, counts: Counts, label: Option<&str>) {
+fn print_rows(config: &Config, rows: Vec<(Counts, Option<&str>)>) {
+    let has_labels = rows.iter().any(|(_, label)| label.is_some());
+    let mut rendered_rows = Vec::new();
+
+    if config.show_headings {
+        rendered_rows.push(headings(config, has_labels));
+    }
+
+    for (counts, label) in rows {
+        rendered_rows.push(fields(config, counts, label));
+    }
+
+    let widths = column_widths(&rendered_rows);
+
+    for row in rendered_rows {
+        print_row(&row, &widths);
+    }
+}
+
+fn headings(config: &Config, has_labels: bool) -> Vec<String> {
+    let mut fields = Vec::new();
+
+    if config.show_lines {
+        fields.push("lines".to_owned());
+    }
+
+    if config.show_words {
+        fields.push("words".to_owned());
+    }
+
+    if config.show_bytes {
+        fields.push("bytes".to_owned());
+    }
+
+    if has_labels {
+        fields.push("file".to_owned());
+    }
+
+    fields
+}
+
+fn fields(config: &Config, counts: Counts, label: Option<&str>) -> Vec<String> {
     let mut fields = Vec::new();
 
     if config.show_lines {
@@ -234,7 +280,36 @@ fn print_counts(config: &Config, counts: Counts, label: Option<&str>) {
         fields.push(label.to_owned());
     }
 
-    println!("{}", fields.join(" "));
+    fields
+}
+
+fn column_widths(rows: &[Vec<String>]) -> Vec<usize> {
+    let column_count = rows.iter().map(Vec::len).max().unwrap_or(0);
+    let mut widths = vec![0; column_count];
+
+    for row in rows {
+        for (index, field) in row.iter().enumerate() {
+            widths[index] = widths[index].max(field.len());
+        }
+    }
+
+    widths
+}
+
+fn print_row(row: &[String], widths: &[usize]) {
+    for (index, field) in row.iter().enumerate() {
+        if index > 0 {
+            print!(" ");
+        }
+
+        if index + 1 == row.len() {
+            print!("{field}");
+        } else {
+            print!("{field:<width$}", width = widths[index]);
+        }
+    }
+
+    println!();
 }
 
 fn format_byte_count(bytes: u64, human_readable: bool) -> String {
@@ -248,6 +323,7 @@ fn format_byte_count(bytes: u64, human_readable: bool) -> String {
 impl std::ops::AddAssign for Counts {
     fn add_assign(&mut self, rhs: Self) {
         self.lines += rhs.lines;
+        self.words += rhs.words;
         self.bytes += rhs.bytes;
     }
 }
@@ -266,6 +342,7 @@ mod tests {
                 show_lines: true,
                 show_words: false,
                 show_bytes: true,
+                show_headings: true,
                 human_readable: false,
                 files: Vec::new()
             }
@@ -284,6 +361,7 @@ mod tests {
                 show_lines: true,
                 show_words: false,
                 show_bytes: true,
+                show_headings: false,
                 human_readable: true,
                 files: vec!["a".to_owned(), "b".to_owned()]
             }
