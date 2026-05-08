@@ -1,11 +1,11 @@
-# vwc
+# xwc
 
-`vwc` is a small `wc`-style command line tool for counting lines, bytes, and optionally words.
+`xwc` is a small `wc`-style command line tool for counting lines, bytes, and optionally words.
 
 By default it prints line and byte counts with headings:
 
 ```console
-$ printf 'one two\nthree\n' | vwc
+$ printf 'one two\nthree\n' | xwc
 lines  bytes
 2      14
 ```
@@ -13,34 +13,34 @@ lines  bytes
 ## Usage
 
 ```console
-$ vwc [OPTIONS] [FILE]...
+$ xwc [OPTIONS] [FILE]...
 ```
 
-When no files are provided, `vwc` reads from standard input. Use `-` as a file argument to read from standard input alongside file paths.
+When no files are provided, `xwc` reads from standard input. Use `-` as a file argument to read from standard input alongside file paths.
 
 Options:
 
-- `-l`, `--lines`: print the newline count.
-- `-c`, `--bytes`: print the byte count.
+- `-l`, `--lines`: print only the newline count.
+- `-c`, `--bytes`: print only the byte count.
 - `-w`, `--words`: print only the word count.
-- `-W`, `--include-words`: include the word count in the default output columns.
+- `-W`, `--include-words`: include the word count in the default output columns (slower).
 - `-h`, `--human-readable`: print byte counts with human-readable units and use the `size` heading.
 - `--help`: print help.
 
 Examples:
 
 ```console
-$ vwc Cargo.toml src/main.rs
+$ xwc Cargo.toml src/main.rs
 lines  bytes  file
 8      174    Cargo.toml
 420    10324  src/main.rs
 428    10498  total
 
-$ vwc --include-words Cargo.toml
+$ xwc --include-words Cargo.toml
 lines  words  bytes  file
 8      24     174    Cargo.toml
 
-$ vwc -hc Cargo.toml
+$ xwc -hc Cargo.toml
 174B  Cargo.toml
 ```
 
@@ -55,7 +55,7 @@ $ cargo run -- [OPTIONS] [FILE]...
 Or use the Just proxy recipe:
 
 ```console
-$ just vwc --include-words Cargo.toml
+$ just xwc --include-words Cargo.toml
 ```
 
 Common development recipes:

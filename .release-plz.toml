@@ -6,6 +6,6 @@ pr_draft = true
 pr_labels = ["release"]
 
 [[package]]
-name = "vwc"
+name = "xwc"
 git_release_name = "v{{ version }}"
 git_tag_name = "v{{ version }}"

@@ -3,8 +3,8 @@ set positional-arguments := true
 _list:
     @just --list
 
-# Run vwc with args
-vwc *args:
+# Run xwc with args
+xwc *args:
     @cargo run --quiet -- {{ args }}
 
 # Lint workspace with Clippy
