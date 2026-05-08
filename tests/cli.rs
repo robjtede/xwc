@@ -7,7 +7,7 @@ fn default_output_is_left_aligned_with_headings() {
     cmd.write_stdin("one two\nthree\n")
         .assert()
         .success()
-        .stdout("lines  size\n2      14\n");
+        .stdout("lines  bytes\n2      14\n");
 }
 
 #[test]
@@ -18,5 +18,16 @@ fn include_words_adds_a_left_aligned_word_column() {
         .write_stdin("one two\nthree\n")
         .assert()
         .success()
-        .stdout("lines  words  size\n2      3      14\n");
+        .stdout("lines  words  bytes\n2      3      14\n");
+}
+
+#[test]
+fn human_readable_default_output_uses_size_heading() {
+    let mut cmd = Command::cargo_bin("vwc").unwrap();
+
+    cmd.arg("-h")
+        .write_stdin("one two\nthree\n")
+        .assert()
+        .success()
+        .stdout("lines  size\n2      14B\n");
 }

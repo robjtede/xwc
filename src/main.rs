@@ -259,7 +259,7 @@ fn headings(config: &Config, has_labels: bool) -> Vec<String> {
     }
 
     if config.show_bytes {
-        fields.push("size".to_owned());
+        fields.push(byte_heading(config).to_owned());
     }
 
     if has_labels {
@@ -289,6 +289,14 @@ fn fields(config: &Config, counts: Counts, label: Option<&str>) -> Vec<String> {
     }
 
     fields
+}
+
+fn byte_heading(config: &Config) -> &'static str {
+    if config.human_readable {
+        "size"
+    } else {
+        "bytes"
+    }
 }
 
 fn column_widths(rows: &[Vec<String>]) -> Vec<usize> {
