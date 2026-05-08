@@ -13,7 +13,7 @@ clap = { version = "4", features = ["derive"] }
 
 [dev-dependencies]
 assert_cmd = "2"
-divan = "0.1"
+divan = { package = "codspeed-divan-compat", version = "4" }
 
 [[bench]]
 name = "count"
