@@ -11,6 +11,7 @@ const BUFFER_SIZE: usize = 64 * 1024;
 pub struct Counts {
     pub lines: u64,
     pub words: u64,
+    pub chars: u64,
     pub bytes: u64,
 }
 
@@ -18,6 +19,7 @@ pub struct Counts {
 pub struct CountOptions {
     pub lines: bool,
     pub words: bool,
+    pub chars: bool,
 }
 
 #[derive(Debug, Default)]
@@ -26,10 +28,16 @@ struct WordState {
     pending_utf8: Vec<u8>,
 }
 
+#[derive(Debug, Default)]
+struct CharState {
+    pending_utf8: Vec<u8>,
+}
+
 pub fn count_reader(mut reader: impl Read, options: CountOptions) -> io::Result<Counts> {
     let mut counts = Counts::default();
     let mut buffer = [0; BUFFER_SIZE];
     let mut word_state = WordState::default();
+    let mut char_state = CharState::default();
 
     loop {
         let read = reader.read(&mut buffer)?;
@@ -49,10 +57,18 @@ pub fn count_reader(mut reader: impl Read, options: CountOptions) -> io::Result<
         if options.words {
             counts.words += count_words(chunk, &mut word_state) as u64;
         }
+
+        if options.chars {
+            counts.chars += count_chars(chunk, &mut char_state) as u64;
+        }
     }
 
     if options.words && !word_state.pending_utf8.is_empty() && !word_state.in_word {
         counts.words += 1;
+    }
+
+    if options.chars && !char_state.pending_utf8.is_empty() {
+        counts.chars += 1;
     }
 
     Ok(counts)
@@ -60,6 +76,60 @@ pub fn count_reader(mut reader: impl Read, options: CountOptions) -> io::Result<
 
 fn bytecount_newlines(buffer: &[u8]) -> usize {
     memchr_iter(b'\n', buffer).count()
+}
+
+fn count_chars(buffer: &[u8], state: &mut CharState) -> usize {
+    let mut chars = 0;
+    let combined;
+
+    let buffer = if state.pending_utf8.is_empty() {
+        buffer
+    } else {
+        combined = {
+            let mut bytes = mem::take(&mut state.pending_utf8);
+            bytes.extend_from_slice(buffer);
+            bytes
+        };
+        &combined
+    };
+
+    let mut offset = 0;
+
+    while offset < buffer.len() {
+        let remaining = buffer
+            .get(offset..)
+            .expect("offset is guarded by the loop condition");
+
+        match str::from_utf8(remaining) {
+            Ok(valid) => {
+                chars += valid.chars().count();
+                break;
+            }
+            Err(error) => {
+                let valid_end = offset + error.valid_up_to();
+                let valid_bytes = buffer
+                    .get(offset..valid_end)
+                    .expect("valid_up_to returns an in-bounds offset");
+                let valid = str::from_utf8(valid_bytes)
+                    .expect("valid_up_to must split at a UTF-8 boundary");
+                chars += valid.chars().count();
+                offset = valid_end;
+
+                if let Some(error_len) = error.error_len() {
+                    chars += 1;
+                    offset += error_len;
+                } else {
+                    let pending = buffer
+                        .get(offset..)
+                        .expect("offset is guarded by the loop condition");
+                    state.pending_utf8.extend_from_slice(pending);
+                    break;
+                }
+            }
+        }
+    }
+
+    chars
 }
 
 fn count_words(buffer: &[u8], state: &mut WordState) -> usize {
@@ -147,7 +217,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn counts_newlines_and_bytes_without_decoding_utf8() {
+    fn counts_newlines_words_chars_and_bytes() {
         let input = "cafe\ncafé\n東京 京都".as_bytes();
 
         assert_eq!(
@@ -155,13 +225,15 @@ mod tests {
                 input,
                 CountOptions {
                     lines: true,
-                    words: true
+                    words: true,
+                    chars: true
                 }
             )
             .unwrap(),
             Counts {
                 lines: 2,
                 words: 4,
+                chars: 15,
                 bytes: 24
             }
         );
@@ -176,13 +248,15 @@ mod tests {
                 input,
                 CountOptions {
                     lines: true,
-                    words: false
+                    words: false,
+                    chars: false
                 }
             )
             .unwrap(),
             Counts {
                 lines: 2,
                 words: 0,
+                chars: 0,
                 bytes: 24
             }
         );
@@ -197,13 +271,15 @@ mod tests {
                 input,
                 CountOptions {
                     lines: false,
-                    words: false
+                    words: false,
+                    chars: false
                 }
             )
             .unwrap(),
             Counts {
                 lines: 0,
                 words: 0,
+                chars: 0,
                 bytes: 14
             }
         );
@@ -225,5 +301,14 @@ mod tests {
 
         assert_eq!(count_words(&input[..4], &mut state), 1);
         assert_eq!(count_words(&input[4..], &mut state), 1);
+    }
+
+    #[test]
+    fn counts_utf8_chars_across_buffer_boundaries() {
+        let mut state = CharState::default();
+        let input = "東京 京都".as_bytes();
+
+        assert_eq!(count_chars(&input[..4], &mut state), 1);
+        assert_eq!(count_chars(&input[4..], &mut state), 4);
     }
 }

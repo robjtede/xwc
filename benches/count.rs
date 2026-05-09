@@ -11,10 +11,12 @@ static LARGE_ASCII: LazyLock<Vec<u8>> =
 const WORDS_EXCLUDED: CountOptions = CountOptions {
     lines: true,
     words: false,
+    chars: false,
 };
 const WORDS_INCLUDED: CountOptions = CountOptions {
     lines: true,
     words: true,
+    chars: false,
 };
 
 #[divan::bench]

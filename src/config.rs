@@ -4,6 +4,7 @@ use crate::CountOptions;
 pub struct Config {
     pub show_lines: bool,
     pub show_words: bool,
+    pub show_chars: bool,
     pub show_bytes: bool,
     pub show_headings: bool,
     pub human_readable: bool,
@@ -17,6 +18,7 @@ impl Config {
         CountOptions {
             lines: self.show_lines,
             words: self.show_words,
+            chars: self.show_chars,
         }
     }
 }

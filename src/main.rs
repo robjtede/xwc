@@ -25,6 +25,16 @@ struct Cli {
     #[arg(short = 'w', long = "words", help = "Print the word count")]
     words: bool,
 
+    #[arg(short = 'm', long = "chars", help = "Print the character count")]
+    chars: bool,
+
+    #[arg(
+        short = 'M',
+        long = "include-chars",
+        help = "Include the character count"
+    )]
+    include_chars: bool,
+
     #[arg(short = 'W', long = "include-words", help = "Include the word count")]
     include_words: bool,
 
@@ -72,11 +82,12 @@ fn main() -> ExitCode {
 
 impl Cli {
     fn into_config(self) -> Config {
-        let has_count_option = self.lines || self.words || self.bytes;
+        let has_count_option = self.lines || self.words || self.chars || self.bytes;
 
         Config {
             show_lines: self.lines || !has_count_option,
             show_words: self.words || self.include_words,
+            show_chars: self.chars || self.include_chars,
             show_bytes: self.bytes || !has_count_option,
             show_headings: !has_count_option,
             human_readable: self.human_readable,
@@ -206,7 +217,7 @@ fn count_path(path: &str, options: CountOptions) -> io::Result<Counts> {
         return count_reader(stdin.lock(), options);
     }
 
-    if !options.lines && !options.words {
+    if !options.lines && !options.words && !options.chars {
         let metadata = fs::metadata(path)?;
 
         if metadata.is_file() {
@@ -263,6 +274,7 @@ mod tests {
             Config {
                 show_lines: true,
                 show_words: false,
+                show_chars: false,
                 show_bytes: true,
                 show_headings: true,
                 human_readable: false,
@@ -284,6 +296,7 @@ mod tests {
             Config {
                 show_lines: true,
                 show_words: false,
+                show_chars: false,
                 show_bytes: true,
                 show_headings: false,
                 human_readable: true,
@@ -303,6 +316,27 @@ mod tests {
             Config {
                 show_lines: true,
                 show_words: true,
+                show_chars: false,
+                show_bytes: true,
+                show_headings: true,
+                human_readable: false,
+                jobs: None,
+                globs: Vec::new(),
+                files: Vec::new()
+            }
+        );
+    }
+
+    #[test]
+    fn include_chars_adds_chars_to_default_columns() {
+        let config = Cli::try_parse_from(["xwc", "-M"]).unwrap().into_config();
+
+        assert_eq!(
+            config,
+            Config {
+                show_lines: true,
+                show_words: false,
+                show_chars: true,
                 show_bytes: true,
                 show_headings: true,
                 human_readable: false,
@@ -349,6 +383,7 @@ mod tests {
             CountOptions {
                 lines: false,
                 words: false,
+                chars: false,
             },
         )
         .unwrap();
@@ -358,6 +393,7 @@ mod tests {
             Counts {
                 lines: 0,
                 words: 0,
+                chars: 0,
                 bytes: 14
             }
         );
@@ -378,6 +414,7 @@ mod tests {
         let config = Config {
             show_lines: true,
             show_words: false,
+            show_chars: false,
             show_bytes: true,
             show_headings: true,
             human_readable: false,
@@ -401,6 +438,7 @@ mod tests {
         let config = Config {
             show_lines: true,
             show_words: false,
+            show_chars: false,
             show_bytes: true,
             show_headings: true,
             human_readable: false,
@@ -431,6 +469,7 @@ mod tests {
             CountOptions {
                 lines: true,
                 words: true,
+                chars: false,
             },
             Some(2),
         );
@@ -451,11 +490,13 @@ mod tests {
                 Counts {
                     lines: 2,
                     words: 2,
+                    chars: 0,
                     bytes: 8,
                 },
                 Counts {
                     lines: 1,
                     words: 2,
+                    chars: 0,
                     bytes: 11,
                 },
             ]

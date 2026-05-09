@@ -24,6 +24,17 @@ fn include_words_adds_a_left_aligned_word_column() {
 }
 
 #[test]
+fn include_chars_adds_a_left_aligned_char_column() {
+    let mut cmd = Command::cargo_bin("xwc").unwrap();
+
+    cmd.arg("--include-chars")
+        .write_stdin("café\n")
+        .assert()
+        .success()
+        .stdout("lines  chars  bytes\n1      5      6\n");
+}
+
+#[test]
 fn words_option_counts_words() {
     let mut cmd = Command::cargo_bin("xwc").unwrap();
 
@@ -32,6 +43,28 @@ fn words_option_counts_words() {
         .assert()
         .success()
         .stdout("3\n");
+}
+
+#[test]
+fn chars_option_counts_utf8_characters() {
+    let mut cmd = Command::cargo_bin("xwc").unwrap();
+
+    cmd.arg("--chars")
+        .write_stdin("café\n")
+        .assert()
+        .success()
+        .stdout("5\n");
+}
+
+#[test]
+fn chars_and_bytes_can_be_counted_together() {
+    let mut cmd = Command::cargo_bin("xwc").unwrap();
+
+    cmd.arg("-mc")
+        .write_stdin("café\n")
+        .assert()
+        .success()
+        .stdout("5  6\n");
 }
 
 #[test]

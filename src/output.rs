@@ -53,6 +53,10 @@ fn headings(config: &Config, has_labels: bool) -> Vec<String> {
         fields.push("words".to_owned());
     }
 
+    if config.show_chars {
+        fields.push("chars".to_owned());
+    }
+
     if config.show_bytes {
         fields.push(byte_heading(config).to_owned());
     }
@@ -73,6 +77,10 @@ fn fields(config: &Config, counts: Counts, label: Option<&str>) -> Vec<String> {
 
     if config.show_words {
         fields.push(counts.words.to_string());
+    }
+
+    if config.show_chars {
+        fields.push(counts.chars.to_string());
     }
 
     if config.show_bytes {
@@ -102,6 +110,7 @@ mod tests {
         Config {
             show_lines: true,
             show_words: false,
+            show_chars: false,
             show_bytes: true,
             show_headings: true,
             human_readable: false,
@@ -119,6 +128,7 @@ mod tests {
                 Counts {
                     lines: 2,
                     words: 0,
+                    chars: 0,
                     bytes: 14,
                 },
                 None,
@@ -142,6 +152,7 @@ mod tests {
                 Counts {
                     lines: 2,
                     words: 0,
+                    chars: 0,
                     bytes: 14,
                 },
                 Some("a.txt"),
