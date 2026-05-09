@@ -64,7 +64,7 @@ fn chars_and_bytes_can_be_counted_together() {
         .write_stdin("café\n")
         .assert()
         .success()
-        .stdout("5  6\n");
+        .stdout("chars  bytes\n5      6\n");
 }
 
 #[test]
@@ -75,7 +75,7 @@ fn all_option_counts_everything() {
         .write_stdin("café\n")
         .assert()
         .success()
-        .stdout("1  1  5  6\n");
+        .stdout("lines  words  chars  bytes\n1      1      5      6\n");
 }
 
 #[test]

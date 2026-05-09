@@ -86,13 +86,19 @@ fn main() -> ExitCode {
 impl Cli {
     fn into_config(self) -> Config {
         let has_count_option = self.lines || self.words || self.chars || self.bytes || self.all;
+        let show_lines = self.lines || self.all || !has_count_option;
+        let show_words = self.words || self.all || self.include_words;
+        let show_chars = self.chars || self.all || self.include_chars;
+        let show_bytes = self.bytes || self.all || !has_count_option;
+        let shown_metric_count =
+            show_lines as u8 + show_words as u8 + show_chars as u8 + show_bytes as u8;
 
         Config {
-            show_lines: self.lines || self.all || !has_count_option,
-            show_words: self.words || self.all || self.include_words,
-            show_chars: self.chars || self.all || self.include_chars,
-            show_bytes: self.bytes || self.all || !has_count_option,
-            show_headings: !has_count_option,
+            show_lines,
+            show_words,
+            show_chars,
+            show_bytes,
+            show_headings: shown_metric_count > 1,
             human_readable: self.human_readable,
             jobs: self.jobs.map(NonZeroUsize::get),
             globs: self.globs,
@@ -301,7 +307,7 @@ mod tests {
                 show_words: false,
                 show_chars: false,
                 show_bytes: true,
-                show_headings: false,
+                show_headings: true,
                 human_readable: true,
                 jobs: None,
                 globs: Vec::new(),
@@ -351,7 +357,7 @@ mod tests {
     }
 
     #[test]
-    fn all_selects_every_count_without_default_headings() {
+    fn all_selects_every_count_with_default_headings() {
         let config = Cli::try_parse_from(["xwc", "--all"]).unwrap().into_config();
 
         assert_eq!(
@@ -361,7 +367,7 @@ mod tests {
                 show_words: true,
                 show_chars: true,
                 show_bytes: true,
-                show_headings: false,
+                show_headings: true,
                 human_readable: false,
                 jobs: None,
                 globs: Vec::new(),
