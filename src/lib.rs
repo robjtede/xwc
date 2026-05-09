@@ -1,4 +1,7 @@
-use std::io::{self, Read};
+use std::{
+    io::{self, Read},
+    mem,
+};
 
 use memchr::memchr_iter;
 
@@ -11,13 +14,18 @@ pub struct Counts {
     pub bytes: u64,
 }
 
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct CountOptions {
+    pub words: bool,
+}
+
 #[derive(Debug, Default)]
 struct WordState {
     in_word: bool,
     pending_utf8: Vec<u8>,
 }
 
-pub fn count_reader(mut reader: impl Read) -> io::Result<Counts> {
+pub fn count_reader(mut reader: impl Read, options: CountOptions) -> io::Result<Counts> {
     let mut counts = Counts::default();
     let mut buffer = [0; BUFFER_SIZE];
     let mut word_state = WordState::default();
@@ -30,10 +38,13 @@ pub fn count_reader(mut reader: impl Read) -> io::Result<Counts> {
 
         counts.bytes += read as u64;
         counts.lines += bytecount_newlines(&buffer[..read]) as u64;
-        counts.words += count_words(&buffer[..read], &mut word_state) as u64;
+
+        if options.words {
+            counts.words += count_words(&buffer[..read], &mut word_state) as u64;
+        }
     }
 
-    if !word_state.pending_utf8.is_empty() && !word_state.in_word {
+    if options.words && !word_state.pending_utf8.is_empty() && !word_state.in_word {
         counts.words += 1;
     }
 
@@ -52,7 +63,7 @@ fn count_words(buffer: &[u8], state: &mut WordState) -> usize {
         buffer
     } else {
         combined = {
-            let mut bytes = std::mem::take(&mut state.pending_utf8);
+            let mut bytes = mem::take(&mut state.pending_utf8);
             bytes.extend_from_slice(buffer);
             bytes
         };
@@ -123,10 +134,24 @@ mod tests {
         let input = "cafe\ncafé\n東京 京都".as_bytes();
 
         assert_eq!(
-            count_reader(input).unwrap(),
+            count_reader(input, CountOptions { words: true }).unwrap(),
             Counts {
                 lines: 2,
                 words: 4,
+                bytes: 24
+            }
+        );
+    }
+
+    #[test]
+    fn skips_word_counting_when_words_are_not_requested() {
+        let input = "cafe\ncafé\n東京 京都".as_bytes();
+
+        assert_eq!(
+            count_reader(input, CountOptions { words: false }).unwrap(),
+            Counts {
+                lines: 2,
+                words: 0,
                 bytes: 24
             }
         );

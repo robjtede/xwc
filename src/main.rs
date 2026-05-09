@@ -6,7 +6,7 @@ use std::{
 
 use bytesize::ByteSize;
 use clap::Parser;
-use xwc::{Counts, count_reader};
+use xwc::{CountOptions, Counts, count_reader};
 
 const BUFFER_SIZE: usize = 64 * 1024;
 
@@ -79,9 +79,13 @@ impl Cli {
 }
 
 fn run(config: &Config) -> bool {
+    let count_options = CountOptions {
+        words: config.show_words,
+    };
+
     if config.files.is_empty() {
         let stdin = io::stdin();
-        match count_reader(stdin.lock()) {
+        match count_reader(stdin.lock(), count_options) {
             Ok(counts) => {
                 print_rows(config, vec![(counts, None)]);
                 return true;
@@ -98,7 +102,7 @@ fn run(config: &Config) -> bool {
     let mut rows = Vec::new();
 
     for path in &config.files {
-        match count_path(path) {
+        match count_path(path, count_options) {
             Ok(counts) => {
                 total += counts;
                 rows.push((counts, Some(path.as_str())));
@@ -119,14 +123,14 @@ fn run(config: &Config) -> bool {
     !had_error
 }
 
-fn count_path(path: &str) -> io::Result<Counts> {
+fn count_path(path: &str, options: CountOptions) -> io::Result<Counts> {
     if path == "-" {
         let stdin = io::stdin();
-        return count_reader(stdin.lock());
+        return count_reader(stdin.lock(), options);
     }
 
     let file = File::open(path)?;
-    count_reader(BufReader::with_capacity(BUFFER_SIZE, file))
+    count_reader(BufReader::with_capacity(BUFFER_SIZE, file), options)
 }
 
 fn print_rows(config: &Config, rows: Vec<(Counts, Option<&str>)>) {

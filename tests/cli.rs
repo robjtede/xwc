@@ -22,6 +22,17 @@ fn include_words_adds_a_left_aligned_word_column() {
 }
 
 #[test]
+fn words_option_counts_words() {
+    let mut cmd = Command::cargo_bin("xwc").unwrap();
+
+    cmd.arg("--words")
+        .write_stdin("one two\nthree\n")
+        .assert()
+        .success()
+        .stdout("3\n");
+}
+
+#[test]
 fn human_readable_default_output_uses_size_heading() {
     let mut cmd = Command::cargo_bin("xwc").unwrap();
 
