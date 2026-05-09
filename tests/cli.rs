@@ -68,6 +68,17 @@ fn chars_and_bytes_can_be_counted_together() {
 }
 
 #[test]
+fn all_option_counts_everything() {
+    let mut cmd = Command::cargo_bin("xwc").unwrap();
+
+    cmd.arg("--all")
+        .write_stdin("café\n")
+        .assert()
+        .success()
+        .stdout("1  1  5  6\n");
+}
+
+#[test]
 fn human_readable_default_output_uses_size_heading() {
     let mut cmd = Command::cargo_bin("xwc").unwrap();
 

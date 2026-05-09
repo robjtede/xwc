@@ -41,6 +41,9 @@ struct Cli {
     #[arg(short = 'c', long = "bytes", help = "Print the byte count")]
     bytes: bool,
 
+    #[arg(short = 'A', long = "all", help = "Print all counts")]
+    all: bool,
+
     #[arg(
         short = 'h',
         long = "human-readable",
@@ -82,13 +85,13 @@ fn main() -> ExitCode {
 
 impl Cli {
     fn into_config(self) -> Config {
-        let has_count_option = self.lines || self.words || self.chars || self.bytes;
+        let has_count_option = self.lines || self.words || self.chars || self.bytes || self.all;
 
         Config {
-            show_lines: self.lines || !has_count_option,
-            show_words: self.words || self.include_words,
-            show_chars: self.chars || self.include_chars,
-            show_bytes: self.bytes || !has_count_option,
+            show_lines: self.lines || self.all || !has_count_option,
+            show_words: self.words || self.all || self.include_words,
+            show_chars: self.chars || self.all || self.include_chars,
+            show_bytes: self.bytes || self.all || !has_count_option,
             show_headings: !has_count_option,
             human_readable: self.human_readable,
             jobs: self.jobs.map(NonZeroUsize::get),
@@ -339,6 +342,26 @@ mod tests {
                 show_chars: true,
                 show_bytes: true,
                 show_headings: true,
+                human_readable: false,
+                jobs: None,
+                globs: Vec::new(),
+                files: Vec::new()
+            }
+        );
+    }
+
+    #[test]
+    fn all_selects_every_count_without_default_headings() {
+        let config = Cli::try_parse_from(["xwc", "--all"]).unwrap().into_config();
+
+        assert_eq!(
+            config,
+            Config {
+                show_lines: true,
+                show_words: true,
+                show_chars: true,
+                show_bytes: true,
+                show_headings: false,
                 human_readable: false,
                 jobs: None,
                 globs: Vec::new(),

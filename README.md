@@ -24,6 +24,7 @@ Options:
 - `-c`, `--bytes`: print only the byte count.
 - `-w`, `--words`: print only the word count.
 - `-m`, `--chars`: print only the UTF-8 character count.
+- `-A`, `--all`: print all counts.
 - `-W`, `--include-words`: include the word count in the default output columns (slower).
 - `-M`, `--include-chars`: include the UTF-8 character count in the default output columns.
 - `-h`, `--human-readable`: print byte counts with human-readable units and use the `size` heading.
@@ -50,6 +51,9 @@ $ printf 'café\n' | xwc -m
 $ printf 'café\n' | xwc -M
 lines  chars  bytes
 1      5      6
+
+$ printf 'café\n' | xwc --all
+1  1  5  6
 
 $ xwc -hc Cargo.toml
 174B  Cargo.toml
