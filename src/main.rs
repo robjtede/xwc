@@ -1,14 +1,18 @@
 use std::{
     fs::{self, File},
     io::{self, BufReader},
+    num::NonZeroUsize,
     process::ExitCode,
+    thread,
 };
 
 use bytesize::ByteSize;
 use clap::Parser;
+use rayon::prelude::*;
 use xwc::{CountOptions, Counts, count_reader};
 
 const BUFFER_SIZE: usize = 64 * 1024;
+const DEFAULT_PARALLEL_FILE_THRESHOLD: usize = 3;
 
 #[derive(Debug, Eq, PartialEq)]
 struct Config {
@@ -17,6 +21,7 @@ struct Config {
     show_bytes: bool,
     show_headings: bool,
     human_readable: bool,
+    jobs: Option<usize>,
     files: Vec<String>,
 }
 
@@ -46,6 +51,14 @@ struct Cli {
     )]
     human_readable: bool,
 
+    #[arg(
+        short = 'j',
+        long = "jobs",
+        value_name = "N",
+        help = "Set the worker count for multiple input files"
+    )]
+    jobs: Option<NonZeroUsize>,
+
     #[arg(long = "help", action = clap::ArgAction::Help, help = "Print help")]
     help: Option<bool>,
 
@@ -73,6 +86,7 @@ impl Cli {
             show_bytes: self.bytes || !has_count_option,
             show_headings: !has_count_option,
             human_readable: self.human_readable,
+            jobs: self.jobs.map(NonZeroUsize::get),
             files: self.files,
         }
     }
@@ -102,15 +116,15 @@ fn run(config: &Config) -> bool {
     let mut had_error = false;
     let mut rows = Vec::new();
 
-    for path in &config.files {
-        match count_path(path, count_options) {
+    for file_count in count_paths(&config.files, count_options, config.jobs) {
+        match file_count.result {
             Ok(counts) => {
                 total += counts;
-                rows.push((counts, Some(path.as_str())));
+                rows.push((counts, Some(file_count.path)));
             }
             Err(error) => {
                 had_error = true;
-                eprintln!("xwc: {path}: {error}");
+                eprintln!("xwc: {}: {error}", file_count.path);
             }
         }
     }
@@ -122,6 +136,60 @@ fn run(config: &Config) -> bool {
     print_rows(config, rows);
 
     !had_error
+}
+
+#[derive(Debug)]
+struct FileCount<'a> {
+    path: &'a str,
+    result: io::Result<Counts>,
+}
+
+fn count_paths<'a>(
+    paths: &'a [String],
+    options: CountOptions,
+    jobs: Option<usize>,
+) -> Vec<FileCount<'a>> {
+    let parallelism = worker_count(paths, jobs);
+
+    let Some(parallelism) = parallelism else {
+        return paths
+            .iter()
+            .map(|path| FileCount {
+                path,
+                result: count_path(path, options),
+            })
+            .collect();
+    };
+
+    rayon::ThreadPoolBuilder::new()
+        .num_threads(parallelism)
+        .build()
+        .expect("parallelism must be non-zero")
+        .install(|| {
+            paths
+                .par_iter()
+                .map(|path| FileCount {
+                    path,
+                    result: count_path(path, options),
+                })
+                .collect()
+        })
+}
+
+fn worker_count(paths: &[String], jobs: Option<usize>) -> Option<usize> {
+    if paths.len() <= 1 || paths.iter().any(|path| path == "-") || jobs == Some(1) {
+        return None;
+    }
+
+    if jobs.is_none() && paths.len() <= DEFAULT_PARALLEL_FILE_THRESHOLD {
+        return None;
+    }
+
+    Some(
+        jobs.or_else(|| thread::available_parallelism().map(usize::from).ok())
+            .unwrap_or(1)
+            .min(paths.len()),
+    )
 }
 
 fn count_path(path: &str, options: CountOptions) -> io::Result<Counts> {
@@ -273,6 +341,7 @@ mod tests {
                 show_bytes: true,
                 show_headings: true,
                 human_readable: false,
+                jobs: None,
                 files: Vec::new()
             }
         );
@@ -292,6 +361,7 @@ mod tests {
                 show_bytes: true,
                 show_headings: false,
                 human_readable: true,
+                jobs: None,
                 files: vec!["a".to_owned(), "b".to_owned()]
             }
         );
@@ -309,9 +379,50 @@ mod tests {
                 show_bytes: true,
                 show_headings: true,
                 human_readable: false,
+                jobs: None,
                 files: Vec::new()
             }
         );
+    }
+
+    #[test]
+    fn parses_jobs_option() {
+        let config = Cli::try_parse_from(["xwc", "-j", "3", "a", "b"])
+            .unwrap()
+            .into_config();
+
+        assert_eq!(config.jobs, Some(3));
+    }
+
+    #[test]
+    fn rejects_zero_jobs() {
+        assert!(Cli::try_parse_from(["xwc", "-j", "0"]).is_err());
+    }
+
+    #[test]
+    fn defaults_to_serial_until_parallel_file_threshold() {
+        let paths = vec!["a".to_owned(), "b".to_owned(), "c".to_owned()];
+
+        assert_eq!(worker_count(&paths, None), None);
+    }
+
+    #[test]
+    fn defaults_to_parallel_after_parallel_file_threshold() {
+        let paths = vec![
+            "a".to_owned(),
+            "b".to_owned(),
+            "c".to_owned(),
+            "d".to_owned(),
+        ];
+
+        assert!(worker_count(&paths, None).is_some());
+    }
+
+    #[test]
+    fn explicit_jobs_overrides_parallel_file_threshold() {
+        let paths = vec!["a".to_owned(), "b".to_owned()];
+
+        assert_eq!(worker_count(&paths, Some(2)), Some(2));
     }
 
     #[test]
@@ -335,6 +446,53 @@ mod tests {
                 words: 0,
                 bytes: 14
             }
+        );
+    }
+
+    #[test]
+    fn counts_multiple_paths_in_input_order() {
+        let first = NamedTempFile::new().unwrap();
+        let second = NamedTempFile::new().unwrap();
+        fs::write(first.path(), "one\ntwo\n").unwrap();
+        fs::write(second.path(), "three four\n").unwrap();
+        let paths = vec![
+            first.path().to_string_lossy().into_owned(),
+            second.path().to_string_lossy().into_owned(),
+        ];
+
+        let file_counts = count_paths(
+            &paths,
+            CountOptions {
+                lines: true,
+                words: true,
+            },
+            Some(2),
+        );
+
+        assert_eq!(
+            file_counts
+                .iter()
+                .map(|file_count| file_count.path)
+                .collect::<Vec<_>>(),
+            paths.iter().map(String::as_str).collect::<Vec<_>>()
+        );
+        assert_eq!(
+            file_counts
+                .into_iter()
+                .map(|file_count| file_count.result.unwrap())
+                .collect::<Vec<_>>(),
+            vec![
+                Counts {
+                    lines: 2,
+                    words: 2,
+                    bytes: 8,
+                },
+                Counts {
+                    lines: 1,
+                    words: 2,
+                    bytes: 11,
+                },
+            ]
         );
     }
 

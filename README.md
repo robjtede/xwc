@@ -25,6 +25,7 @@ Options:
 - `-w`, `--words`: print only the word count.
 - `-W`, `--include-words`: include the word count in the default output columns (slower).
 - `-h`, `--human-readable`: print byte counts with human-readable units and use the `size` heading.
+- `-j`, `--jobs <N>`: set the worker count for multiple input files. By default, `xwc` starts parallel counting after 3 input files.
 - `--help`: print help.
 
 Examples:
