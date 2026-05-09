@@ -18,42 +18,62 @@ const WORDS_INCLUDED: CountOptions = CountOptions {
 };
 
 #[divan::bench]
-fn count_small_ascii(bencher: Bencher) {
-    bencher
-        .bench_local(|| black_box(count_reader(black_box(SMALL_ASCII), WORDS_EXCLUDED).unwrap()));
-}
-
-#[divan::bench]
-fn count_mixed_utf8(bencher: Bencher) {
+fn count_small_ascii(bencher: Bencher<'_, '_>) {
     bencher.bench_local(|| {
-        black_box(count_reader(black_box(MIXED_UTF8.as_bytes()), WORDS_EXCLUDED).unwrap())
+        black_box(
+            count_reader(black_box(SMALL_ASCII), WORDS_EXCLUDED)
+                .expect("in-memory benchmark input should be readable"),
+        )
     });
 }
 
 #[divan::bench]
-fn count_large_ascii(bencher: Bencher) {
+fn count_mixed_utf8(bencher: Bencher<'_, '_>) {
     bencher.bench_local(|| {
-        black_box(count_reader(black_box(LARGE_ASCII.as_slice()), WORDS_EXCLUDED).unwrap())
+        black_box(
+            count_reader(black_box(MIXED_UTF8.as_bytes()), WORDS_EXCLUDED)
+                .expect("in-memory benchmark input should be readable"),
+        )
     });
 }
 
 #[divan::bench]
-fn count_small_ascii_with_words(bencher: Bencher) {
-    bencher
-        .bench_local(|| black_box(count_reader(black_box(SMALL_ASCII), WORDS_INCLUDED).unwrap()));
-}
-
-#[divan::bench]
-fn count_mixed_utf8_with_words(bencher: Bencher) {
+fn count_large_ascii(bencher: Bencher<'_, '_>) {
     bencher.bench_local(|| {
-        black_box(count_reader(black_box(MIXED_UTF8.as_bytes()), WORDS_INCLUDED).unwrap())
+        black_box(
+            count_reader(black_box(LARGE_ASCII.as_slice()), WORDS_EXCLUDED)
+                .expect("in-memory benchmark input should be readable"),
+        )
     });
 }
 
 #[divan::bench]
-fn count_large_ascii_with_words(bencher: Bencher) {
+fn count_small_ascii_with_words(bencher: Bencher<'_, '_>) {
     bencher.bench_local(|| {
-        black_box(count_reader(black_box(LARGE_ASCII.as_slice()), WORDS_INCLUDED).unwrap())
+        black_box(
+            count_reader(black_box(SMALL_ASCII), WORDS_INCLUDED)
+                .expect("in-memory benchmark input should be readable"),
+        )
+    });
+}
+
+#[divan::bench]
+fn count_mixed_utf8_with_words(bencher: Bencher<'_, '_>) {
+    bencher.bench_local(|| {
+        black_box(
+            count_reader(black_box(MIXED_UTF8.as_bytes()), WORDS_INCLUDED)
+                .expect("in-memory benchmark input should be readable"),
+        )
+    });
+}
+
+#[divan::bench]
+fn count_large_ascii_with_words(bencher: Bencher<'_, '_>) {
+    bencher.bench_local(|| {
+        black_box(
+            count_reader(black_box(LARGE_ASCII.as_slice()), WORDS_INCLUDED)
+                .expect("in-memory benchmark input should be readable"),
+        )
     });
 }
 

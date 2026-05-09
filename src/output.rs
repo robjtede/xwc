@@ -26,8 +26,8 @@ pub fn column_widths(rows: &[Vec<String>]) -> Vec<usize> {
     let mut widths = vec![0; column_count];
 
     for row in rows {
-        for (index, field) in row.iter().enumerate() {
-            widths[index] = widths[index].max(field.len());
+        for (width, field) in widths.iter_mut().zip(row) {
+            *width = (*width).max(field.len());
         }
     }
 

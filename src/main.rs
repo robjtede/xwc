@@ -231,7 +231,7 @@ fn print_rows(config: &Config, rows: Vec<(Counts, Option<&str>)>) {
 }
 
 fn print_row(row: &[String], widths: &[usize]) {
-    for (index, field) in row.iter().enumerate() {
+    for (index, (field, width)) in row.iter().zip(widths).enumerate() {
         if index > 0 {
             print!("  ");
         }
@@ -239,7 +239,7 @@ fn print_row(row: &[String], widths: &[usize]) {
         if index + 1 == row.len() {
             print!("{field}");
         } else {
-            print!("{field:<width$}", width = widths[index]);
+            print!("{field:<width$}");
         }
     }
 
@@ -336,7 +336,7 @@ mod tests {
 
     #[test]
     fn rejects_zero_jobs() {
-        assert!(Cli::try_parse_from(["xwc", "-j", "0"]).is_err());
+        Cli::try_parse_from(["xwc", "-j", "0"]).unwrap_err();
     }
 
     #[test]

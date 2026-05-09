@@ -1,6 +1,6 @@
 use std::{
     io::{self, Read},
-    mem,
+    mem, str,
 };
 
 use memchr::memchr_iter;
@@ -38,13 +38,16 @@ pub fn count_reader(mut reader: impl Read, options: CountOptions) -> io::Result<
         }
 
         counts.bytes += read as u64;
+        let chunk = buffer
+            .get(..read)
+            .expect("Read::read cannot report more bytes than the buffer holds");
 
         if options.lines {
-            counts.lines += bytecount_newlines(&buffer[..read]) as u64;
+            counts.lines += bytecount_newlines(chunk) as u64;
         }
 
         if options.words {
-            counts.words += count_words(&buffer[..read], &mut word_state) as u64;
+            counts.words += count_words(chunk, &mut word_state) as u64;
         }
     }
 
@@ -77,14 +80,21 @@ fn count_words(buffer: &[u8], state: &mut WordState) -> usize {
     let mut offset = 0;
 
     while offset < buffer.len() {
-        match std::str::from_utf8(&buffer[offset..]) {
+        let remaining = buffer
+            .get(offset..)
+            .expect("offset is guarded by the loop condition");
+
+        match str::from_utf8(remaining) {
             Ok(valid) => {
                 words += count_words_in_str(valid, &mut state.in_word);
                 break;
             }
             Err(error) => {
                 let valid_end = offset + error.valid_up_to();
-                let valid = std::str::from_utf8(&buffer[offset..valid_end])
+                let valid_bytes = buffer
+                    .get(offset..valid_end)
+                    .expect("valid_up_to returns an in-bounds offset");
+                let valid = str::from_utf8(valid_bytes)
                     .expect("valid_up_to must split at a UTF-8 boundary");
                 words += count_words_in_str(valid, &mut state.in_word);
                 offset = valid_end;
@@ -96,7 +106,10 @@ fn count_words(buffer: &[u8], state: &mut WordState) -> usize {
                     }
                     offset += error_len;
                 } else {
-                    state.pending_utf8.extend_from_slice(&buffer[offset..]);
+                    let pending = buffer
+                        .get(offset..)
+                        .expect("offset is guarded by the loop condition");
+                    state.pending_utf8.extend_from_slice(pending);
                     break;
                 }
             }
