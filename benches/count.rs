@@ -8,54 +8,47 @@ static MIXED_UTF8: &str = "cafe\ncafé\n東京 京都\nemoji 😀 test\n";
 static LARGE_ASCII: LazyLock<Vec<u8>> =
     LazyLock::new(|| "alpha beta gamma delta\n".repeat(16 * 1024).into_bytes());
 
-mod words_excluded {
-    use super::*;
+const WORDS_EXCLUDED: CountOptions = CountOptions { words: false };
+const WORDS_INCLUDED: CountOptions = CountOptions { words: true };
 
-    const OPTIONS: CountOptions = CountOptions { words: false };
-
-    #[divan::bench]
-    fn count_small_ascii(bencher: Bencher) {
-        bencher.bench_local(|| black_box(count_reader(black_box(SMALL_ASCII), OPTIONS).unwrap()));
-    }
-
-    #[divan::bench]
-    fn count_mixed_utf8(bencher: Bencher) {
-        bencher.bench_local(|| {
-            black_box(count_reader(black_box(MIXED_UTF8.as_bytes()), OPTIONS).unwrap())
-        });
-    }
-
-    #[divan::bench]
-    fn count_large_ascii(bencher: Bencher) {
-        bencher.bench_local(|| {
-            black_box(count_reader(black_box(LARGE_ASCII.as_slice()), OPTIONS).unwrap())
-        });
-    }
+#[divan::bench]
+fn count_small_ascii(bencher: Bencher) {
+    bencher
+        .bench_local(|| black_box(count_reader(black_box(SMALL_ASCII), WORDS_EXCLUDED).unwrap()));
 }
 
-mod words_included {
-    use super::*;
+#[divan::bench]
+fn count_mixed_utf8(bencher: Bencher) {
+    bencher.bench_local(|| {
+        black_box(count_reader(black_box(MIXED_UTF8.as_bytes()), WORDS_EXCLUDED).unwrap())
+    });
+}
 
-    const OPTIONS: CountOptions = CountOptions { words: true };
+#[divan::bench]
+fn count_large_ascii(bencher: Bencher) {
+    bencher.bench_local(|| {
+        black_box(count_reader(black_box(LARGE_ASCII.as_slice()), WORDS_EXCLUDED).unwrap())
+    });
+}
 
-    #[divan::bench]
-    fn count_small_ascii(bencher: Bencher) {
-        bencher.bench_local(|| black_box(count_reader(black_box(SMALL_ASCII), OPTIONS).unwrap()));
-    }
+#[divan::bench]
+fn count_small_ascii_with_words(bencher: Bencher) {
+    bencher
+        .bench_local(|| black_box(count_reader(black_box(SMALL_ASCII), WORDS_INCLUDED).unwrap()));
+}
 
-    #[divan::bench]
-    fn count_mixed_utf8(bencher: Bencher) {
-        bencher.bench_local(|| {
-            black_box(count_reader(black_box(MIXED_UTF8.as_bytes()), OPTIONS).unwrap())
-        });
-    }
+#[divan::bench]
+fn count_mixed_utf8_with_words(bencher: Bencher) {
+    bencher.bench_local(|| {
+        black_box(count_reader(black_box(MIXED_UTF8.as_bytes()), WORDS_INCLUDED).unwrap())
+    });
+}
 
-    #[divan::bench]
-    fn count_large_ascii(bencher: Bencher) {
-        bencher.bench_local(|| {
-            black_box(count_reader(black_box(LARGE_ASCII.as_slice()), OPTIONS).unwrap())
-        });
-    }
+#[divan::bench]
+fn count_large_ascii_with_words(bencher: Bencher) {
+    bencher.bench_local(|| {
+        black_box(count_reader(black_box(LARGE_ASCII.as_slice()), WORDS_INCLUDED).unwrap())
+    });
 }
 
 fn main() {
