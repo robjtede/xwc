@@ -10,6 +10,20 @@ lines  bytes
 2      14
 ```
 
+## Install
+
+Recommended, using prebuilt release binaries and [cargo-binstall](https://github.com/cargo-bins/cargo-binstall):
+
+```console
+$ cargo binstall xwc
+```
+
+Fallback, building from source with Cargo:
+
+```console
+$ cargo --locked install xwc
+```
+
 ## Usage
 
 ```console
