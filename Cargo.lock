@@ -1069,6 +1069,7 @@ dependencies = [
  "bytesize",
  "clap",
  "codspeed-divan-compat",
+ "glob",
  "memchr",
  "rayon",
  "tempfile",

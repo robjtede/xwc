@@ -26,6 +26,7 @@ Options:
 - `-W`, `--include-words`: include the word count in the default output columns (slower).
 - `-h`, `--human-readable`: print byte counts with human-readable units and use the `size` heading.
 - `-j`, `--jobs <N>`: set the worker count for multiple input files. By default, `xwc` starts parallel counting after 3 input files.
+- `--glob <PATTERN>`: add files matching a glob pattern. Can be used more than once.
 - `--help`: print help.
 
 Examples:
@@ -43,6 +44,12 @@ lines  words  bytes  file
 
 $ xwc -hc Cargo.toml
 174B  Cargo.toml
+
+$ xwc --glob 'src/*.rs'
+lines  bytes  file
+216    5266   src/lib.rs
+613    15509  src/main.rs
+829    20775  total
 ```
 
 ## Development

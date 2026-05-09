@@ -8,6 +8,7 @@ use std::{
 
 use bytesize::ByteSize;
 use clap::Parser;
+use glob::glob;
 use rayon::prelude::*;
 use xwc::{CountOptions, Counts, count_reader};
 
@@ -22,6 +23,7 @@ struct Config {
     show_headings: bool,
     human_readable: bool,
     jobs: Option<usize>,
+    globs: Vec<String>,
     files: Vec<String>,
 }
 
@@ -59,6 +61,13 @@ struct Cli {
     )]
     jobs: Option<NonZeroUsize>,
 
+    #[arg(
+        long = "glob",
+        value_name = "PATTERN",
+        help = "Add files matching PATTERN"
+    )]
+    globs: Vec<String>,
+
     #[arg(long = "help", action = clap::ArgAction::Help, help = "Print help")]
     help: Option<bool>,
 
@@ -87,6 +96,7 @@ impl Cli {
             show_headings: !has_count_option,
             human_readable: self.human_readable,
             jobs: self.jobs.map(NonZeroUsize::get),
+            globs: self.globs,
             files: self.files,
         }
     }
@@ -97,8 +107,15 @@ fn run(config: &Config) -> bool {
         lines: config.show_lines,
         words: config.show_words,
     };
+    let paths = match input_paths(config) {
+        Ok(paths) => paths,
+        Err(error) => {
+            eprintln!("xwc: --glob: {error}");
+            return false;
+        }
+    };
 
-    if config.files.is_empty() {
+    if paths.is_empty() {
         let stdin = io::stdin();
         match count_reader(stdin.lock(), count_options) {
             Ok(counts) => {
@@ -116,7 +133,7 @@ fn run(config: &Config) -> bool {
     let mut had_error = false;
     let mut rows = Vec::new();
 
-    for file_count in count_paths(&config.files, count_options, config.jobs) {
+    for file_count in count_paths(&paths, count_options, config.jobs) {
         match file_count.result {
             Ok(counts) => {
                 total += counts;
@@ -129,13 +146,38 @@ fn run(config: &Config) -> bool {
         }
     }
 
-    if config.files.len() > 1 {
+    if paths.len() > 1 {
         rows.push((total, Some("total")));
     }
 
     print_rows(config, rows);
 
     !had_error
+}
+
+fn input_paths(config: &Config) -> Result<Vec<String>, String> {
+    let mut paths = config.files.clone();
+
+    for pattern in &config.globs {
+        let entries = glob(pattern).map_err(|error| format!("{pattern}: {error}"))?;
+        let mut matches = Vec::new();
+
+        for entry in entries {
+            match entry {
+                Ok(path) => matches.push(path.to_string_lossy().into_owned()),
+                Err(error) => return Err(format!("{}: {error}", error.path().display())),
+            }
+        }
+
+        if matches.is_empty() {
+            return Err(format!("{pattern}: no matches"));
+        }
+
+        matches.sort();
+        paths.extend(matches);
+    }
+
+    Ok(paths)
 }
 
 #[derive(Debug)]
@@ -342,6 +384,7 @@ mod tests {
                 show_headings: true,
                 human_readable: false,
                 jobs: None,
+                globs: Vec::new(),
                 files: Vec::new()
             }
         );
@@ -362,6 +405,7 @@ mod tests {
                 show_headings: false,
                 human_readable: true,
                 jobs: None,
+                globs: Vec::new(),
                 files: vec!["a".to_owned(), "b".to_owned()]
             }
         );
@@ -380,6 +424,7 @@ mod tests {
                 show_headings: true,
                 human_readable: false,
                 jobs: None,
+                globs: Vec::new(),
                 files: Vec::new()
             }
         );
@@ -392,6 +437,18 @@ mod tests {
             .into_config();
 
         assert_eq!(config.jobs, Some(3));
+    }
+
+    #[test]
+    fn parses_glob_options() {
+        let config = Cli::try_parse_from(["xwc", "--glob", "src/*.rs", "--glob", "tests/*.rs"])
+            .unwrap()
+            .into_config();
+
+        assert_eq!(
+            config.globs,
+            vec!["src/*.rs".to_owned(), "tests/*.rs".to_owned()]
+        );
     }
 
     #[test]
@@ -446,6 +503,58 @@ mod tests {
                 words: 0,
                 bytes: 14
             }
+        );
+    }
+
+    #[test]
+    fn input_paths_expands_globs_in_sorted_order() {
+        let directory = tempfile::tempdir().unwrap();
+        let path_b = directory.path().join("b.txt");
+        let path_a = directory.path().join("a.txt");
+        fs::write(&path_b, "one\n").unwrap();
+        fs::write(&path_a, "two\n").unwrap();
+        let pattern = directory
+            .path()
+            .join("*.txt")
+            .to_string_lossy()
+            .into_owned();
+        let config = Config {
+            show_lines: true,
+            show_words: false,
+            show_bytes: true,
+            show_headings: true,
+            human_readable: false,
+            jobs: None,
+            globs: vec![pattern],
+            files: vec!["literal.txt".to_owned()],
+        };
+
+        assert_eq!(
+            input_paths(&config).unwrap(),
+            vec![
+                "literal.txt".to_owned(),
+                path_a.to_string_lossy().into_owned(),
+                path_b.to_string_lossy().into_owned(),
+            ]
+        );
+    }
+
+    #[test]
+    fn input_paths_rejects_globs_without_matches() {
+        let config = Config {
+            show_lines: true,
+            show_words: false,
+            show_bytes: true,
+            show_headings: true,
+            human_readable: false,
+            jobs: None,
+            globs: vec!["missing-*".to_owned()],
+            files: Vec::new(),
+        };
+
+        assert_eq!(
+            input_paths(&config).unwrap_err(),
+            "missing-*: no matches".to_owned()
         );
     }
 

@@ -1,3 +1,5 @@
+use std::fs;
+
 use assert_cmd::Command;
 
 #[test]
@@ -41,4 +43,30 @@ fn human_readable_default_output_uses_size_heading() {
         .assert()
         .success()
         .stdout("lines  size\n2      14B\n");
+}
+
+#[test]
+fn glob_option_counts_matching_files() {
+    let directory = tempfile::tempdir().unwrap();
+    let path_b = directory.path().join("b.txt");
+    let path_a = directory.path().join("a.txt");
+    fs::write(&path_b, "one\n").unwrap();
+    fs::write(&path_a, "two\nthree\n").unwrap();
+    let pattern = directory
+        .path()
+        .join("*.txt")
+        .to_string_lossy()
+        .into_owned();
+    let path_a = path_a.to_string_lossy();
+    let path_b = path_b.to_string_lossy();
+    let expected = format!(
+        "lines  bytes  file\n2      10     {path_a}\n1      4      {path_b}\n3      14     total\n"
+    );
+    let mut cmd = Command::cargo_bin("xwc").unwrap();
+
+    cmd.arg("--glob")
+        .arg(pattern)
+        .assert()
+        .success()
+        .stdout(expected);
 }
