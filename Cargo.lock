@@ -777,6 +777,7 @@ dependencies = [
  "bytesize",
  "clap",
  "codspeed-divan-compat",
+ "memchr",
 ]
 
 [[package]]

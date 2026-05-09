@@ -1,5 +1,7 @@
 use std::io::{self, Read};
 
+use memchr::memchr_iter;
+
 const BUFFER_SIZE: usize = 64 * 1024;
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -39,7 +41,7 @@ pub fn count_reader(mut reader: impl Read) -> io::Result<Counts> {
 }
 
 fn bytecount_newlines(buffer: &[u8]) -> usize {
-    buffer.iter().filter(|&&byte| byte == b'\n').count()
+    memchr_iter(b'\n', buffer).count()
 }
 
 fn count_words(buffer: &[u8], state: &mut WordState) -> usize {

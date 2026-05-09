@@ -10,6 +10,7 @@ include = ["Cargo.lock", "Cargo.toml", "LICENSE", "README.md", "src/**/*", "test
 [dependencies]
 bytesize = "2"
 clap = { version = "4", features = ["derive"] }
+memchr = "2"
 
 [dev-dependencies]
 assert_cmd = "2"
