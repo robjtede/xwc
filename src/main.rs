@@ -3,29 +3,14 @@ use std::{
     io::{self, BufReader},
     num::NonZeroUsize,
     process::ExitCode,
-    thread,
 };
 
-use bytesize::ByteSize;
 use clap::Parser;
 use glob::glob;
 use rayon::prelude::*;
-use xwc::{CountOptions, Counts, count_reader};
+use xwc::{Config, CountOptions, Counts, column_widths, count_reader, render_rows, worker_count};
 
 const BUFFER_SIZE: usize = 64 * 1024;
-const DEFAULT_PARALLEL_FILE_THRESHOLD: usize = 3;
-
-#[derive(Debug, Eq, PartialEq)]
-struct Config {
-    show_lines: bool,
-    show_words: bool,
-    show_bytes: bool,
-    show_headings: bool,
-    human_readable: bool,
-    jobs: Option<usize>,
-    globs: Vec<String>,
-    files: Vec<String>,
-}
 
 #[derive(Debug, Parser)]
 #[command(
@@ -103,10 +88,7 @@ impl Cli {
 }
 
 fn run(config: &Config) -> bool {
-    let count_options = CountOptions {
-        lines: config.show_lines,
-        words: config.show_words,
-    };
+    let count_options = config.count_options();
     let paths = match input_paths(config) {
         Ok(paths) => paths,
         Err(error) => {
@@ -218,22 +200,6 @@ fn count_paths<'a>(
         })
 }
 
-fn worker_count(paths: &[String], jobs: Option<usize>) -> Option<usize> {
-    if paths.len() <= 1 || paths.iter().any(|path| path == "-") || jobs == Some(1) {
-        return None;
-    }
-
-    if jobs.is_none() && paths.len() <= DEFAULT_PARALLEL_FILE_THRESHOLD {
-        return None;
-    }
-
-    Some(
-        jobs.or_else(|| thread::available_parallelism().map(usize::from).ok())
-            .unwrap_or(1)
-            .min(paths.len()),
-    )
-}
-
 fn count_path(path: &str, options: CountOptions) -> io::Result<Counts> {
     if path == "-" {
         let stdin = io::stdin();
@@ -256,87 +222,12 @@ fn count_path(path: &str, options: CountOptions) -> io::Result<Counts> {
 }
 
 fn print_rows(config: &Config, rows: Vec<(Counts, Option<&str>)>) {
-    let has_labels = rows.iter().any(|(_, label)| label.is_some());
-    let mut rendered_rows = Vec::new();
-
-    if config.show_headings {
-        rendered_rows.push(headings(config, has_labels));
-    }
-
-    for (counts, label) in rows {
-        rendered_rows.push(fields(config, counts, label));
-    }
-
+    let rendered_rows = render_rows(config, rows);
     let widths = column_widths(&rendered_rows);
 
     for row in rendered_rows {
         print_row(&row, &widths);
     }
-}
-
-fn headings(config: &Config, has_labels: bool) -> Vec<String> {
-    let mut fields = Vec::new();
-
-    if config.show_lines {
-        fields.push("lines".to_owned());
-    }
-
-    if config.show_words {
-        fields.push("words".to_owned());
-    }
-
-    if config.show_bytes {
-        fields.push(byte_heading(config).to_owned());
-    }
-
-    if has_labels {
-        fields.push("file".to_owned());
-    }
-
-    fields
-}
-
-fn fields(config: &Config, counts: Counts, label: Option<&str>) -> Vec<String> {
-    let mut fields = Vec::new();
-
-    if config.show_lines {
-        fields.push(counts.lines.to_string());
-    }
-
-    if config.show_words {
-        fields.push(counts.words.to_string());
-    }
-
-    if config.show_bytes {
-        fields.push(format_byte_count(counts.bytes, config.human_readable));
-    }
-
-    if let Some(label) = label {
-        fields.push(label.to_owned());
-    }
-
-    fields
-}
-
-fn byte_heading(config: &Config) -> &'static str {
-    if config.human_readable {
-        "size"
-    } else {
-        "bytes"
-    }
-}
-
-fn column_widths(rows: &[Vec<String>]) -> Vec<usize> {
-    let column_count = rows.iter().map(Vec::len).max().unwrap_or(0);
-    let mut widths = vec![0; column_count];
-
-    for row in rows {
-        for (index, field) in row.iter().enumerate() {
-            widths[index] = widths[index].max(field.len());
-        }
-    }
-
-    widths
 }
 
 fn print_row(row: &[String], widths: &[usize]) {
@@ -353,14 +244,6 @@ fn print_row(row: &[String], widths: &[usize]) {
     }
 
     println!();
-}
-
-fn format_byte_count(bytes: u64, human_readable: bool) -> String {
-    if human_readable {
-        ByteSize::b(bytes).display().iec_short().to_string()
-    } else {
-        bytes.to_string()
-    }
 }
 
 #[cfg(test)]
@@ -454,32 +337,6 @@ mod tests {
     #[test]
     fn rejects_zero_jobs() {
         assert!(Cli::try_parse_from(["xwc", "-j", "0"]).is_err());
-    }
-
-    #[test]
-    fn defaults_to_serial_until_parallel_file_threshold() {
-        let paths = vec!["a".to_owned(), "b".to_owned(), "c".to_owned()];
-
-        assert_eq!(worker_count(&paths, None), None);
-    }
-
-    #[test]
-    fn defaults_to_parallel_after_parallel_file_threshold() {
-        let paths = vec![
-            "a".to_owned(),
-            "b".to_owned(),
-            "c".to_owned(),
-            "d".to_owned(),
-        ];
-
-        assert!(worker_count(&paths, None).is_some());
-    }
-
-    #[test]
-    fn explicit_jobs_overrides_parallel_file_threshold() {
-        let paths = vec!["a".to_owned(), "b".to_owned()];
-
-        assert_eq!(worker_count(&paths, Some(2)), Some(2));
     }
 
     #[test]
@@ -603,11 +460,5 @@ mod tests {
                 },
             ]
         );
-    }
-
-    #[test]
-    fn formats_human_readable_bytes() {
-        assert_eq!(format_byte_count(1024, true), "1.0K");
-        assert_eq!(format_byte_count(1024, false), "1024");
     }
 }
