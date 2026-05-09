@@ -8,8 +8,14 @@ static MIXED_UTF8: &str = "cafe\ncafé\n東京 京都\nemoji 😀 test\n";
 static LARGE_ASCII: LazyLock<Vec<u8>> =
     LazyLock::new(|| "alpha beta gamma delta\n".repeat(16 * 1024).into_bytes());
 
-const WORDS_EXCLUDED: CountOptions = CountOptions { words: false };
-const WORDS_INCLUDED: CountOptions = CountOptions { words: true };
+const WORDS_EXCLUDED: CountOptions = CountOptions {
+    lines: true,
+    words: false,
+};
+const WORDS_INCLUDED: CountOptions = CountOptions {
+    lines: true,
+    words: true,
+};
 
 #[divan::bench]
 fn count_small_ascii(bencher: Bencher) {

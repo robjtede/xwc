@@ -1,5 +1,5 @@
 use std::{
-    fs::File,
+    fs::{self, File},
     io::{self, BufReader},
     process::ExitCode,
 };
@@ -80,6 +80,7 @@ impl Cli {
 
 fn run(config: &Config) -> bool {
     let count_options = CountOptions {
+        lines: config.show_lines,
         words: config.show_words,
     };
 
@@ -127,6 +128,17 @@ fn count_path(path: &str, options: CountOptions) -> io::Result<Counts> {
     if path == "-" {
         let stdin = io::stdin();
         return count_reader(stdin.lock(), options);
+    }
+
+    if !options.lines && !options.words {
+        let metadata = fs::metadata(path)?;
+
+        if metadata.is_file() {
+            return Ok(Counts {
+                bytes: metadata.len(),
+                ..Counts::default()
+            });
+        }
     }
 
     let file = File::open(path)?;
@@ -243,6 +255,10 @@ fn format_byte_count(bytes: u64, human_readable: bool) -> String {
 
 #[cfg(test)]
 mod tests {
+    use std::fs;
+
+    use tempfile::NamedTempFile;
+
     use super::*;
 
     #[test]
@@ -294,6 +310,30 @@ mod tests {
                 show_headings: true,
                 human_readable: false,
                 files: Vec::new()
+            }
+        );
+    }
+
+    #[test]
+    fn byte_only_path_count_does_not_count_lines_or_words() {
+        let file = NamedTempFile::new().unwrap();
+        fs::write(file.path(), "one\ntwo\nthree\n").unwrap();
+
+        let counts = count_path(
+            file.path().to_str().unwrap(),
+            CountOptions {
+                lines: false,
+                words: false,
+            },
+        )
+        .unwrap();
+
+        assert_eq!(
+            counts,
+            Counts {
+                lines: 0,
+                words: 0,
+                bytes: 14
             }
         );
     }

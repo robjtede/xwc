@@ -16,6 +16,7 @@ pub struct Counts {
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct CountOptions {
+    pub lines: bool,
     pub words: bool,
 }
 
@@ -37,7 +38,10 @@ pub fn count_reader(mut reader: impl Read, options: CountOptions) -> io::Result<
         }
 
         counts.bytes += read as u64;
-        counts.lines += bytecount_newlines(&buffer[..read]) as u64;
+
+        if options.lines {
+            counts.lines += bytecount_newlines(&buffer[..read]) as u64;
+        }
 
         if options.words {
             counts.words += count_words(&buffer[..read], &mut word_state) as u64;
@@ -134,7 +138,14 @@ mod tests {
         let input = "cafe\ncafé\n東京 京都".as_bytes();
 
         assert_eq!(
-            count_reader(input, CountOptions { words: true }).unwrap(),
+            count_reader(
+                input,
+                CountOptions {
+                    lines: true,
+                    words: true
+                }
+            )
+            .unwrap(),
             Counts {
                 lines: 2,
                 words: 4,
@@ -148,11 +159,39 @@ mod tests {
         let input = "cafe\ncafé\n東京 京都".as_bytes();
 
         assert_eq!(
-            count_reader(input, CountOptions { words: false }).unwrap(),
+            count_reader(
+                input,
+                CountOptions {
+                    lines: true,
+                    words: false
+                }
+            )
+            .unwrap(),
             Counts {
                 lines: 2,
                 words: 0,
                 bytes: 24
+            }
+        );
+    }
+
+    #[test]
+    fn skips_line_counting_when_lines_are_not_requested() {
+        let input = "one\ntwo\nthree\n".as_bytes();
+
+        assert_eq!(
+            count_reader(
+                input,
+                CountOptions {
+                    lines: false,
+                    words: false
+                }
+            )
+            .unwrap(),
+            Counts {
+                lines: 0,
+                words: 0,
+                bytes: 14
             }
         );
     }
