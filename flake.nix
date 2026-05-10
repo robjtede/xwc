@@ -1,6 +1,7 @@
 {
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.11";
+    nixpkgs-unstable.url = "github:NixOS/nixpkgs/nixos-unstable";
     flake-parts.url = "github:hercules-ci/flake-parts";
   };
 
@@ -18,8 +19,12 @@
           pkgs,
           config,
           lib,
+          system,
           ...
         }:
+        let
+          pkgsUnstable = import inputs.nixpkgs-unstable { inherit system; };
+        in
         {
           formatter = pkgs.nixfmt;
 
@@ -30,11 +35,11 @@
               pkgs.cargo-nextest
               pkgs.cargo-watch
               pkgs.fd
-              pkgs.just
+              pkgsUnstable.just
               pkgs.nodePackages.prettier
               pkgs.taplo
             ]
-            ++ lib.optional pkgs.stdenv.isDarwin [
+            ++ lib.optionals pkgs.stdenv.isDarwin [
               pkgs.pkgsBuildHost.libiconv
             ];
           };
