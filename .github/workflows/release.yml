@@ -50,6 +50,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: scripts/update-release-notes '${{ steps.release-plz.outputs.releases }}'
 
+      - name: Comment on release PR
+        if: ${{ steps.release-plz.outputs.releases_created == 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: scripts/comment-release-pr '${{ steps.release-plz.outputs.releases }}' '${{ github.sha }}'
+
   upload-assets:
     name: Upload release assets
     needs: release
