@@ -1,20 +1,20 @@
 #!/usr/bin/env bash
 
-# comments on the merged release PR with links to draft releases
+# comments on the merged release PR after release assets finish uploading
 
 set -eEuo pipefail
 
 RELEASE_PLZ_RELEASES_JSON="$1"
 COMMIT_SHA="${2:-${GITHUB_SHA:-}}"
-MARKER="<!-- xwc:draft-release-link -->"
+MARKER="<!-- xwc:release-assets-uploaded -->"
 
 if [[ -z "$COMMIT_SHA" ]]; then
-    echo "No commit SHA provided; skipping release PR comment"
+    echo "No commit SHA provided; skipping release assets comment"
     exit 0
 fi
 
 if [[ -z "${GITHUB_REPOSITORY:-}" ]]; then
-    echo "GITHUB_REPOSITORY is not set; skipping release PR comment"
+    echo "GITHUB_REPOSITORY is not set; skipping release assets comment"
     exit 0
 fi
 
@@ -25,7 +25,7 @@ pr_number="$(
 )"
 
 if [[ -z "$pr_number" ]]; then
-    echo "No merged PR found for ${COMMIT_SHA}; skipping release PR comment"
+    echo "No merged PR found for ${COMMIT_SHA}; skipping release assets comment"
     exit 0
 fi
 
@@ -41,11 +41,11 @@ while read -r release; do
 done < <(echo "$RELEASE_PLZ_RELEASES_JSON" | jq -c '.[]')
 
 if [[ -z "$release_lines" ]]; then
-    echo "No release URLs found; skipping release PR comment"
+    echo "No release URLs found; skipping release assets comment"
     exit 0
 fi
 
-body="${MARKER}"$'\n'"Draft release created:"$'\n\n'"${release_lines}"
+body="${MARKER}"$'\n'"Release assets uploaded:"$'\n\n'"${release_lines}"
 
 existing_comment_id="$(
     gh api \

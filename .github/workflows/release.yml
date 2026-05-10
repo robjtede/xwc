@@ -58,8 +58,8 @@ jobs:
 
   upload-assets:
     name: Upload release assets
-    needs: release
     if: ${{ needs.release.outputs.releases_created == 'true' }}
+    needs: release
     strategy:
       fail-fast: false
       matrix:
@@ -123,3 +123,19 @@ jobs:
         uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4.1.0
         with:
           subject-path: "${{ steps.upload-release.outputs.archive }}.*"
+
+  release-assets-uploaded:
+    name: Release assets uploaded
+    if: ${{ needs.release.outputs.releases_created == 'true' }}
+    runs-on: ubuntu-latest
+    needs:
+      - release
+      - upload-assets
+
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Comment on release PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: scripts/comment-release-assets-uploaded '${{ needs.release.outputs.releases }}' '${{ github.sha }}'
