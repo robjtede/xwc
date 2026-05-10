@@ -5,10 +5,13 @@ use std::{
     process::ExitCode,
 };
 
-use clap::Parser;
+use clap::{Parser, ValueEnum};
 use glob::glob;
 use rayon::prelude::*;
-use xwc::{Config, CountOptions, Counts, column_widths, count_reader, render_rows, worker_count};
+use xwc::{
+    Config, CountOptions, Counts, SortBy, SortOrder, column_widths, count_reader, render_rows,
+    worker_count,
+};
 
 const BUFFER_SIZE: usize = 64 * 1024;
 
@@ -75,11 +78,45 @@ struct Cli {
     )]
     globs: Vec<String>,
 
+    #[arg(
+        long = "sort-by",
+        value_enum,
+        value_name = "COLUMN",
+        help = "Sort output rows by COLUMN"
+    )]
+    sort_by: Option<CliSortBy>,
+
+    #[arg(
+        long = "sort-order",
+        value_enum,
+        default_value_t = CliSortOrder::Asc,
+        value_name = "ORDER",
+        help = "Set output sort order"
+    )]
+    sort_order: CliSortOrder,
+
     #[arg(long = "help", action = clap::ArgAction::Help, help = "Print help")]
     help: Option<bool>,
 
     #[arg(value_name = "FILE")]
     files: Vec<String>,
+}
+
+#[derive(Clone, Copy, Debug, ValueEnum)]
+enum CliSortBy {
+    Lines,
+    Words,
+    Chars,
+    #[value(name = "max-line")]
+    MaxLine,
+    Bytes,
+    File,
+}
+
+#[derive(Clone, Copy, Debug, ValueEnum)]
+enum CliSortOrder {
+    Asc,
+    Desc,
 }
 
 fn main() -> ExitCode {
@@ -116,8 +153,32 @@ impl Cli {
             show_headings: shown_metric_count > 1,
             human_readable: self.human_readable,
             jobs: self.jobs.map(NonZeroUsize::get),
+            sort_by: self.sort_by.map(Into::into),
+            sort_order: self.sort_order.into(),
             globs: self.globs,
             files: self.files,
+        }
+    }
+}
+
+impl From<CliSortBy> for SortBy {
+    fn from(sort_by: CliSortBy) -> Self {
+        match sort_by {
+            CliSortBy::Lines => Self::Lines,
+            CliSortBy::Words => Self::Words,
+            CliSortBy::Chars => Self::Chars,
+            CliSortBy::MaxLine => Self::MaxLine,
+            CliSortBy::Bytes => Self::Bytes,
+            CliSortBy::File => Self::File,
+        }
+    }
+}
+
+impl From<CliSortOrder> for SortOrder {
+    fn from(sort_order: CliSortOrder) -> Self {
+        match sort_order {
+            CliSortOrder::Asc => Self::Asc,
+            CliSortOrder::Desc => Self::Desc,
         }
     }
 }
@@ -163,6 +224,8 @@ fn run(config: &Config) -> bool {
         }
     }
 
+    sort_rows(config, &mut rows);
+
     if paths.len() > 1 {
         rows.push((total, Some("total")));
     }
@@ -170,6 +233,28 @@ fn run(config: &Config) -> bool {
     print_rows(config, rows);
 
     !had_error
+}
+
+fn sort_rows(config: &Config, rows: &mut [(Counts, Option<&str>)]) {
+    let Some(sort_by) = config.sort_by else {
+        return;
+    };
+
+    rows.sort_by(|left, right| {
+        let ordering = match sort_by {
+            SortBy::Lines => left.0.lines.cmp(&right.0.lines),
+            SortBy::Words => left.0.words.cmp(&right.0.words),
+            SortBy::Chars => left.0.chars.cmp(&right.0.chars),
+            SortBy::MaxLine => left.0.max_line_length.cmp(&right.0.max_line_length),
+            SortBy::Bytes => left.0.bytes.cmp(&right.0.bytes),
+            SortBy::File => left.1.unwrap_or_default().cmp(right.1.unwrap_or_default()),
+        };
+
+        match config.sort_order {
+            SortOrder::Asc => ordering,
+            SortOrder::Desc => ordering.reverse(),
+        }
+    });
 }
 
 fn input_paths(config: &Config) -> Result<Vec<String>, String> {
@@ -304,6 +389,8 @@ mod tests {
                 show_headings: true,
                 human_readable: false,
                 jobs: None,
+                sort_by: None,
+                sort_order: SortOrder::Asc,
                 globs: Vec::new(),
                 files: Vec::new()
             }
@@ -327,6 +414,8 @@ mod tests {
                 show_headings: true,
                 human_readable: true,
                 jobs: None,
+                sort_by: None,
+                sort_order: SortOrder::Asc,
                 globs: Vec::new(),
                 files: vec!["a".to_owned(), "b".to_owned()]
             }
@@ -348,6 +437,8 @@ mod tests {
                 show_headings: true,
                 human_readable: false,
                 jobs: None,
+                sort_by: None,
+                sort_order: SortOrder::Asc,
                 globs: Vec::new(),
                 files: Vec::new()
             }
@@ -369,6 +460,8 @@ mod tests {
                 show_headings: true,
                 human_readable: false,
                 jobs: None,
+                sort_by: None,
+                sort_order: SortOrder::Asc,
                 globs: Vec::new(),
                 files: Vec::new()
             }
@@ -392,6 +485,8 @@ mod tests {
                 show_headings: true,
                 human_readable: false,
                 jobs: None,
+                sort_by: None,
+                sort_order: SortOrder::Asc,
                 globs: Vec::new(),
                 files: Vec::new()
             }
@@ -413,6 +508,8 @@ mod tests {
                 show_headings: true,
                 human_readable: false,
                 jobs: None,
+                sort_by: None,
+                sort_order: SortOrder::Asc,
                 globs: Vec::new(),
                 files: Vec::new()
             }
@@ -438,6 +535,16 @@ mod tests {
             config.globs,
             vec!["src/*.rs".to_owned(), "tests/*.rs".to_owned()]
         );
+    }
+
+    #[test]
+    fn parses_sort_options() {
+        let config = Cli::try_parse_from(["xwc", "--sort-by", "bytes", "--sort-order", "desc"])
+            .unwrap()
+            .into_config();
+
+        assert_eq!(config.sort_by, Some(SortBy::Bytes));
+        assert_eq!(config.sort_order, SortOrder::Desc);
     }
 
     #[test]
@@ -490,6 +597,8 @@ mod tests {
                 show_headings: false,
                 human_readable: false,
                 jobs: None,
+                sort_by: None,
+                sort_order: SortOrder::Asc,
                 globs: Vec::new(),
                 files: Vec::new()
             }
@@ -517,6 +626,8 @@ mod tests {
             show_headings: true,
             human_readable: false,
             jobs: None,
+            sort_by: None,
+            sort_order: SortOrder::Asc,
             globs: vec![pattern],
             files: vec!["literal.txt".to_owned()],
         };
@@ -542,6 +653,8 @@ mod tests {
             show_headings: true,
             human_readable: false,
             jobs: None,
+            sort_by: None,
+            sort_order: SortOrder::Asc,
             globs: vec!["missing-*".to_owned()],
             files: Vec::new(),
         };
@@ -549,6 +662,55 @@ mod tests {
         assert_eq!(
             input_paths(&config).unwrap_err(),
             "missing-*: no matches".to_owned()
+        );
+    }
+
+    #[test]
+    fn sort_rows_keeps_total_out_of_sorted_rows() {
+        let mut rows = vec![
+            (
+                Counts {
+                    lines: 2,
+                    words: 0,
+                    chars: 0,
+                    bytes: 20,
+                    max_line_length: 0,
+                },
+                Some("b.txt"),
+            ),
+            (
+                Counts {
+                    lines: 1,
+                    words: 0,
+                    chars: 0,
+                    bytes: 10,
+                    max_line_length: 0,
+                },
+                Some("a.txt"),
+            ),
+        ];
+        let config = Config {
+            show_lines: true,
+            show_words: false,
+            show_chars: false,
+            show_bytes: true,
+            show_max_line_length: false,
+            show_headings: true,
+            human_readable: false,
+            jobs: None,
+            sort_by: Some(SortBy::Bytes),
+            sort_order: SortOrder::Desc,
+            globs: Vec::new(),
+            files: Vec::new(),
+        };
+
+        sort_rows(&config, &mut rows);
+
+        assert_eq!(
+            rows.into_iter()
+                .map(|(_, label)| label.unwrap())
+                .collect::<Vec<_>>(),
+            vec!["b.txt", "a.txt"]
         );
     }
 

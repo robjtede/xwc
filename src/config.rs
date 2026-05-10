@@ -1,5 +1,21 @@
 use crate::CountOptions;
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum SortBy {
+    Lines,
+    Words,
+    Chars,
+    MaxLine,
+    Bytes,
+    File,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum SortOrder {
+    Asc,
+    Desc,
+}
+
 #[derive(Debug, Eq, PartialEq)]
 pub struct Config {
     pub show_lines: bool,
@@ -10,6 +26,8 @@ pub struct Config {
     pub show_headings: bool,
     pub human_readable: bool,
     pub jobs: Option<usize>,
+    pub sort_by: Option<SortBy>,
+    pub sort_order: SortOrder,
     pub globs: Vec<String>,
     pub files: Vec<String>,
 }

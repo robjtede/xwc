@@ -113,6 +113,7 @@ fn byte_heading(config: &Config) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::SortOrder;
 
     fn default_config() -> Config {
         Config {
@@ -124,6 +125,8 @@ mod tests {
             show_headings: true,
             human_readable: false,
             jobs: None,
+            sort_by: None,
+            sort_order: SortOrder::Asc,
             globs: Vec::new(),
             files: Vec::new(),
         }

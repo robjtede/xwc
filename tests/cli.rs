@@ -136,3 +136,31 @@ fn glob_option_counts_matching_files() {
         .success()
         .stdout(expected);
 }
+
+#[test]
+fn sort_by_sorts_file_rows_and_keeps_total_last() {
+    let directory = tempfile::tempdir().unwrap();
+    let path_b = directory.path().join("b.txt");
+    let path_a = directory.path().join("a.txt");
+    fs::write(&path_b, "one\n").unwrap();
+    fs::write(&path_a, "two\nthree\n").unwrap();
+    let pattern = directory
+        .path()
+        .join("*.txt")
+        .to_string_lossy()
+        .into_owned();
+    let path_a = path_a.to_string_lossy();
+    let path_b = path_b.to_string_lossy();
+    let expected = format!(
+        "lines  bytes  file\n1      4      {path_b}\n2      10     {path_a}\n3      14     total\n"
+    );
+    let mut cmd = Command::cargo_bin("xwc").unwrap();
+
+    cmd.arg("--glob")
+        .arg(pattern)
+        .arg("--sort-by")
+        .arg("bytes")
+        .assert()
+        .success()
+        .stdout(expected);
+}

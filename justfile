@@ -1,5 +1,3 @@
-set positional-arguments := true
-
 _list:
     @just --list
 
@@ -18,13 +16,6 @@ fmt-rust-check:
 # Test workspace
 test:
     cargo nextest run --workspace --all-features
-
-# Generate benchmark fixture files
-[arg("size", long="size", help="fixture sizes, e.g. '1K 10M 500M'")]
-[arg("block_size", long="block-size", help="reusable generation block size")]
-[arg("chunk_size", long="chunk-size", help="simulated read chunk size for split fixtures")]
-fixtures size="1K 10K 100K 1M 10M 100M 500M" chunk_size="65536" block_size="1048576":
-    XWC_FIXTURE_SIZES='{{ size }}' XWC_CHUNK_SIZE='{{ chunk_size }}' XWC_BLOCK_SIZE='{{ block_size }}' benches/fixtures/generate.sh
 
 # Test workspace and generate Codecov coverage file
 test-coverage-codecov toolchain="":
@@ -60,3 +51,10 @@ fmt:
     fd --type=file --hidden --extension=md --extension=yml --exec-batch prettier --write
     fd --hidden --extension=toml --exec-batch taplo format
     cargo +nightly fmt
+
+# Generate benchmark fixture files
+[arg("size", long="size", help="fixture sizes, e.g. '1K 10M 500M'")]
+[arg("block_size", long="block-size", help="reusable generation block size")]
+[arg("chunk_size", long="chunk-size", help="simulated read chunk size for split fixtures")]
+fixtures size="1K 10K 100K 1M 10M 100M 500M" chunk_size="65536" block_size="1048576":
+    XWC_FIXTURE_SIZES='{{ size }}' XWC_CHUNK_SIZE='{{ chunk_size }}' XWC_BLOCK_SIZE='{{ block_size }}' benches/fixtures/generate.sh
