@@ -12,11 +12,13 @@ const WORDS_EXCLUDED: CountOptions = CountOptions {
     lines: true,
     words: false,
     chars: false,
+    max_line_length: false,
 };
 const WORDS_INCLUDED: CountOptions = CountOptions {
     lines: true,
     words: true,
     chars: false,
+    max_line_length: false,
 };
 
 #[divan::bench]

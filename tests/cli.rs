@@ -35,6 +35,17 @@ fn include_chars_adds_a_left_aligned_char_column() {
 }
 
 #[test]
+fn include_longest_line_adds_a_left_aligned_longest_line_column() {
+    let mut cmd = Command::cargo_bin("xwc").unwrap();
+
+    cmd.arg("--include-longest-line")
+        .write_stdin("one\nthree\ncafé\n")
+        .assert()
+        .success()
+        .stdout("lines  max-line  bytes\n3      5         16\n");
+}
+
+#[test]
 fn words_option_counts_words() {
     let mut cmd = Command::cargo_bin("xwc").unwrap();
 
@@ -51,6 +62,17 @@ fn chars_option_counts_utf8_characters() {
 
     cmd.arg("--chars")
         .write_stdin("café\n")
+        .assert()
+        .success()
+        .stdout("5\n");
+}
+
+#[test]
+fn longest_line_option_counts_longest_line() {
+    let mut cmd = Command::cargo_bin("xwc").unwrap();
+
+    cmd.arg("--longest-line")
+        .write_stdin("one\nthree\ncafé\n")
         .assert()
         .success()
         .stdout("5\n");
@@ -75,7 +97,7 @@ fn all_option_counts_everything() {
         .write_stdin("café\n")
         .assert()
         .success()
-        .stdout("lines  words  chars  bytes\n1      1      5      6\n");
+        .stdout("lines  words  chars  max-line  bytes\n1      1      5      4         6\n");
 }
 
 #[test]

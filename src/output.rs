@@ -57,6 +57,10 @@ fn headings(config: &Config, has_labels: bool) -> Vec<String> {
         fields.push("chars".to_owned());
     }
 
+    if config.show_max_line_length {
+        fields.push("max-line".to_owned());
+    }
+
     if config.show_bytes {
         fields.push(byte_heading(config).to_owned());
     }
@@ -81,6 +85,10 @@ fn fields(config: &Config, counts: Counts, label: Option<&str>) -> Vec<String> {
 
     if config.show_chars {
         fields.push(counts.chars.to_string());
+    }
+
+    if config.show_max_line_length {
+        fields.push(counts.max_line_length.to_string());
     }
 
     if config.show_bytes {
@@ -112,6 +120,7 @@ mod tests {
             show_words: false,
             show_chars: false,
             show_bytes: true,
+            show_max_line_length: false,
             show_headings: true,
             human_readable: false,
             jobs: None,
@@ -130,6 +139,7 @@ mod tests {
                     words: 0,
                     chars: 0,
                     bytes: 14,
+                    max_line_length: 0,
                 },
                 None,
             )],
@@ -154,6 +164,7 @@ mod tests {
                     words: 0,
                     chars: 0,
                     bytes: 14,
+                    max_line_length: 0,
                 },
                 Some("a.txt"),
             )],

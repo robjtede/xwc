@@ -38,6 +38,15 @@ struct Cli {
     #[arg(short = 'W', long = "include-words", help = "Include the word count")]
     include_words: bool,
 
+    #[arg(long = "longest-line", help = "Print the longest line length")]
+    longest_line: bool,
+
+    #[arg(
+        long = "include-longest-line",
+        help = "Include the longest line length"
+    )]
+    include_longest_line: bool,
+
     #[arg(short = 'c', long = "bytes", help = "Print the byte count")]
     bytes: bool,
 
@@ -85,19 +94,25 @@ fn main() -> ExitCode {
 
 impl Cli {
     fn into_config(self) -> Config {
-        let has_count_option = self.lines || self.words || self.chars || self.bytes || self.all;
+        let has_count_option =
+            self.lines || self.words || self.chars || self.bytes || self.longest_line || self.all;
         let show_lines = self.lines || self.all || !has_count_option;
         let show_words = self.words || self.all || self.include_words;
         let show_chars = self.chars || self.all || self.include_chars;
         let show_bytes = self.bytes || self.all || !has_count_option;
-        let shown_metric_count =
-            show_lines as u8 + show_words as u8 + show_chars as u8 + show_bytes as u8;
+        let show_max_line_length = self.longest_line || self.include_longest_line || self.all;
+        let shown_metric_count = show_lines as u8
+            + show_words as u8
+            + show_chars as u8
+            + show_bytes as u8
+            + show_max_line_length as u8;
 
         Config {
             show_lines,
             show_words,
             show_chars,
             show_bytes,
+            show_max_line_length,
             show_headings: shown_metric_count > 1,
             human_readable: self.human_readable,
             jobs: self.jobs.map(NonZeroUsize::get),
@@ -226,7 +241,7 @@ fn count_path(path: &str, options: CountOptions) -> io::Result<Counts> {
         return count_reader(stdin.lock(), options);
     }
 
-    if !options.lines && !options.words && !options.chars {
+    if !options.lines && !options.words && !options.chars && !options.max_line_length {
         let metadata = fs::metadata(path)?;
 
         if metadata.is_file() {
@@ -285,6 +300,7 @@ mod tests {
                 show_words: false,
                 show_chars: false,
                 show_bytes: true,
+                show_max_line_length: false,
                 show_headings: true,
                 human_readable: false,
                 jobs: None,
@@ -307,6 +323,7 @@ mod tests {
                 show_words: false,
                 show_chars: false,
                 show_bytes: true,
+                show_max_line_length: false,
                 show_headings: true,
                 human_readable: true,
                 jobs: None,
@@ -327,6 +344,7 @@ mod tests {
                 show_words: true,
                 show_chars: false,
                 show_bytes: true,
+                show_max_line_length: false,
                 show_headings: true,
                 human_readable: false,
                 jobs: None,
@@ -347,6 +365,30 @@ mod tests {
                 show_words: false,
                 show_chars: true,
                 show_bytes: true,
+                show_max_line_length: false,
+                show_headings: true,
+                human_readable: false,
+                jobs: None,
+                globs: Vec::new(),
+                files: Vec::new()
+            }
+        );
+    }
+
+    #[test]
+    fn include_longest_line_adds_longest_line_to_default_columns() {
+        let config = Cli::try_parse_from(["xwc", "--include-longest-line"])
+            .unwrap()
+            .into_config();
+
+        assert_eq!(
+            config,
+            Config {
+                show_lines: true,
+                show_words: false,
+                show_chars: false,
+                show_bytes: true,
+                show_max_line_length: true,
                 show_headings: true,
                 human_readable: false,
                 jobs: None,
@@ -367,6 +409,7 @@ mod tests {
                 show_words: true,
                 show_chars: true,
                 show_bytes: true,
+                show_max_line_length: true,
                 show_headings: true,
                 human_readable: false,
                 jobs: None,
@@ -413,6 +456,7 @@ mod tests {
                 lines: false,
                 words: false,
                 chars: false,
+                max_line_length: false,
             },
         )
         .unwrap();
@@ -423,7 +467,31 @@ mod tests {
                 lines: 0,
                 words: 0,
                 chars: 0,
-                bytes: 14
+                bytes: 14,
+                max_line_length: 0
+            }
+        );
+    }
+
+    #[test]
+    fn longest_line_selects_only_longest_line_without_default_headings() {
+        let config = Cli::try_parse_from(["xwc", "--longest-line"])
+            .unwrap()
+            .into_config();
+
+        assert_eq!(
+            config,
+            Config {
+                show_lines: false,
+                show_words: false,
+                show_chars: false,
+                show_bytes: false,
+                show_max_line_length: true,
+                show_headings: false,
+                human_readable: false,
+                jobs: None,
+                globs: Vec::new(),
+                files: Vec::new()
             }
         );
     }
@@ -445,6 +513,7 @@ mod tests {
             show_words: false,
             show_chars: false,
             show_bytes: true,
+            show_max_line_length: false,
             show_headings: true,
             human_readable: false,
             jobs: None,
@@ -469,6 +538,7 @@ mod tests {
             show_words: false,
             show_chars: false,
             show_bytes: true,
+            show_max_line_length: false,
             show_headings: true,
             human_readable: false,
             jobs: None,
@@ -499,6 +569,7 @@ mod tests {
                 lines: true,
                 words: true,
                 chars: false,
+                max_line_length: false,
             },
             Some(2),
         );
@@ -521,12 +592,14 @@ mod tests {
                     words: 2,
                     chars: 0,
                     bytes: 8,
+                    max_line_length: 0,
                 },
                 Counts {
                     lines: 1,
                     words: 2,
                     chars: 0,
                     bytes: 11,
+                    max_line_length: 0,
                 },
             ]
         );
