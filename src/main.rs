@@ -3,14 +3,15 @@ use std::{
     io::{self, BufReader},
     num::NonZeroUsize,
     process::ExitCode,
+    time::{Duration, Instant},
 };
 
 use clap::{Parser, ValueEnum};
 use glob::glob;
 use rayon::prelude::*;
 use xwc::{
-    Config, CountOptions, Counts, SortBy, SortOrder, column_widths, count_reader, render_rows,
-    worker_count,
+    Config, CountOptions, Counts, OutputRow, SortBy, SortOrder, column_widths, count_reader,
+    render_rows, worker_count,
 };
 
 const BUFFER_SIZE: usize = 64 * 1024;
@@ -64,6 +65,12 @@ struct Cli {
     human_readable: bool,
 
     #[arg(
+        long = "self-profile",
+        help = "Include per-input counting duration in the output"
+    )]
+    self_profile: bool,
+
+    #[arg(
         short = 'j',
         long = "jobs",
         value_name = "N",
@@ -111,6 +118,7 @@ enum CliSortBy {
     MaxLine,
     Bytes,
     File,
+    Duration,
 }
 
 #[derive(Clone, Copy, Debug, ValueEnum)]
@@ -142,7 +150,8 @@ impl Cli {
             + show_words as u8
             + show_chars as u8
             + show_bytes as u8
-            + show_max_line_length as u8;
+            + show_max_line_length as u8
+            + self.self_profile as u8;
 
         Config {
             show_lines,
@@ -152,6 +161,7 @@ impl Cli {
             show_max_line_length,
             show_headings: shown_metric_count > 1,
             human_readable: self.human_readable,
+            self_profile: self.self_profile,
             jobs: self.jobs.map(NonZeroUsize::get),
             sort_by: self.sort_by.map(Into::into),
             sort_order: self.sort_order.into(),
@@ -170,6 +180,7 @@ impl From<CliSortBy> for SortBy {
             CliSortBy::MaxLine => Self::MaxLine,
             CliSortBy::Bytes => Self::Bytes,
             CliSortBy::File => Self::File,
+            CliSortBy::Duration => Self::Duration,
         }
     }
 }
@@ -195,9 +206,18 @@ fn run(config: &Config) -> bool {
 
     if paths.is_empty() {
         let stdin = io::stdin();
+        let started = Instant::now();
         match count_reader(stdin.lock(), count_options) {
             Ok(counts) => {
-                print_rows(config, vec![(counts, None)]);
+                let duration = config.self_profile.then(|| started.elapsed());
+                print_rows(
+                    config,
+                    vec![OutputRow {
+                        counts,
+                        duration,
+                        label: None,
+                    }],
+                );
                 return true;
             }
             Err(error) => {
@@ -208,14 +228,23 @@ fn run(config: &Config) -> bool {
     }
 
     let mut total = Counts::default();
+    let mut total_duration = Duration::default();
     let mut had_error = false;
     let mut rows = Vec::new();
 
-    for file_count in count_paths(&paths, count_options, config.jobs) {
+    for file_count in count_paths(&paths, count_options, config.jobs, config.self_profile) {
         match file_count.result {
-            Ok(counts) => {
+            Ok(profiled_counts) => {
+                let counts = profiled_counts.counts;
                 total += counts;
-                rows.push((counts, Some(file_count.path)));
+                if let Some(duration) = profiled_counts.duration {
+                    total_duration += duration;
+                }
+                rows.push(OutputRow {
+                    counts,
+                    duration: profiled_counts.duration,
+                    label: Some(file_count.path),
+                });
             }
             Err(error) => {
                 had_error = true;
@@ -227,7 +256,11 @@ fn run(config: &Config) -> bool {
     sort_rows(config, &mut rows);
 
     if paths.len() > 1 {
-        rows.push((total, Some("total")));
+        rows.push(OutputRow {
+            counts: total,
+            duration: config.self_profile.then_some(total_duration),
+            label: Some("total"),
+        });
     }
 
     print_rows(config, rows);
@@ -235,19 +268,26 @@ fn run(config: &Config) -> bool {
     !had_error
 }
 
-fn sort_rows(config: &Config, rows: &mut [(Counts, Option<&str>)]) {
+fn sort_rows(config: &Config, rows: &mut [OutputRow<'_>]) {
     let Some(sort_by) = config.sort_by else {
         return;
     };
 
     rows.sort_by(|left, right| {
         let ordering = match sort_by {
-            SortBy::Lines => left.0.lines.cmp(&right.0.lines),
-            SortBy::Words => left.0.words.cmp(&right.0.words),
-            SortBy::Chars => left.0.chars.cmp(&right.0.chars),
-            SortBy::MaxLine => left.0.max_line_length.cmp(&right.0.max_line_length),
-            SortBy::Bytes => left.0.bytes.cmp(&right.0.bytes),
-            SortBy::File => left.1.unwrap_or_default().cmp(right.1.unwrap_or_default()),
+            SortBy::Lines => left.counts.lines.cmp(&right.counts.lines),
+            SortBy::Words => left.counts.words.cmp(&right.counts.words),
+            SortBy::Chars => left.counts.chars.cmp(&right.counts.chars),
+            SortBy::MaxLine => left
+                .counts
+                .max_line_length
+                .cmp(&right.counts.max_line_length),
+            SortBy::Bytes => left.counts.bytes.cmp(&right.counts.bytes),
+            SortBy::File => left
+                .label
+                .unwrap_or_default()
+                .cmp(right.label.unwrap_or_default()),
+            SortBy::Duration => left.duration.cmp(&right.duration),
         };
 
         match config.sort_order {
@@ -285,13 +325,20 @@ fn input_paths(config: &Config) -> Result<Vec<String>, String> {
 #[derive(Debug)]
 struct FileCount<'a> {
     path: &'a str,
-    result: io::Result<Counts>,
+    result: io::Result<ProfiledCounts>,
+}
+
+#[derive(Clone, Copy, Debug)]
+struct ProfiledCounts {
+    counts: Counts,
+    duration: Option<Duration>,
 }
 
 fn count_paths<'a>(
     paths: &'a [String],
     options: CountOptions,
     jobs: Option<usize>,
+    self_profile: bool,
 ) -> Vec<FileCount<'a>> {
     let parallelism = worker_count(paths, jobs);
 
@@ -300,7 +347,7 @@ fn count_paths<'a>(
             .iter()
             .map(|path| FileCount {
                 path,
-                result: count_path(path, options),
+                result: count_path_profiled(path, options, self_profile),
             })
             .collect();
     };
@@ -314,10 +361,24 @@ fn count_paths<'a>(
                 .par_iter()
                 .map(|path| FileCount {
                     path,
-                    result: count_path(path, options),
+                    result: count_path_profiled(path, options, self_profile),
                 })
                 .collect()
         })
+}
+
+fn count_path_profiled(
+    path: &str,
+    options: CountOptions,
+    self_profile: bool,
+) -> io::Result<ProfiledCounts> {
+    let started = Instant::now();
+    let counts = count_path(path, options)?;
+
+    Ok(ProfiledCounts {
+        counts,
+        duration: self_profile.then(|| started.elapsed()),
+    })
 }
 
 fn count_path(path: &str, options: CountOptions) -> io::Result<Counts> {
@@ -341,7 +402,7 @@ fn count_path(path: &str, options: CountOptions) -> io::Result<Counts> {
     count_reader(BufReader::with_capacity(BUFFER_SIZE, file), options)
 }
 
-fn print_rows(config: &Config, rows: Vec<(Counts, Option<&str>)>) {
+fn print_rows(config: &Config, rows: Vec<OutputRow<'_>>) {
     let rendered_rows = render_rows(config, rows);
     let widths = column_widths(&rendered_rows);
 
@@ -368,7 +429,7 @@ fn print_row(row: &[String], widths: &[usize]) {
 
 #[cfg(test)]
 mod tests {
-    use std::fs;
+    use std::{fs, time::Duration};
 
     use tempfile::NamedTempFile;
 
@@ -388,6 +449,7 @@ mod tests {
                 show_max_line_length: false,
                 show_headings: true,
                 human_readable: false,
+                self_profile: false,
                 jobs: None,
                 sort_by: None,
                 sort_order: SortOrder::Asc,
@@ -413,6 +475,7 @@ mod tests {
                 show_max_line_length: false,
                 show_headings: true,
                 human_readable: true,
+                self_profile: false,
                 jobs: None,
                 sort_by: None,
                 sort_order: SortOrder::Asc,
@@ -436,6 +499,7 @@ mod tests {
                 show_max_line_length: false,
                 show_headings: true,
                 human_readable: false,
+                self_profile: false,
                 jobs: None,
                 sort_by: None,
                 sort_order: SortOrder::Asc,
@@ -459,6 +523,7 @@ mod tests {
                 show_max_line_length: false,
                 show_headings: true,
                 human_readable: false,
+                self_profile: false,
                 jobs: None,
                 sort_by: None,
                 sort_order: SortOrder::Asc,
@@ -484,6 +549,7 @@ mod tests {
                 show_max_line_length: true,
                 show_headings: true,
                 human_readable: false,
+                self_profile: false,
                 jobs: None,
                 sort_by: None,
                 sort_order: SortOrder::Asc,
@@ -507,6 +573,7 @@ mod tests {
                 show_max_line_length: true,
                 show_headings: true,
                 human_readable: false,
+                self_profile: false,
                 jobs: None,
                 sort_by: None,
                 sort_order: SortOrder::Asc,
@@ -545,6 +612,25 @@ mod tests {
 
         assert_eq!(config.sort_by, Some(SortBy::Bytes));
         assert_eq!(config.sort_order, SortOrder::Desc);
+    }
+
+    #[test]
+    fn parses_duration_sort_option() {
+        let config = Cli::try_parse_from(["xwc", "--sort-by", "duration"])
+            .unwrap()
+            .into_config();
+
+        assert_eq!(config.sort_by, Some(SortBy::Duration));
+    }
+
+    #[test]
+    fn self_profile_adds_duration_to_headed_output() {
+        let config = Cli::try_parse_from(["xwc", "--longest-line", "--self-profile"])
+            .unwrap()
+            .into_config();
+
+        assert!(config.self_profile);
+        assert!(config.show_headings);
     }
 
     #[test]
@@ -596,6 +682,7 @@ mod tests {
                 show_max_line_length: true,
                 show_headings: false,
                 human_readable: false,
+                self_profile: false,
                 jobs: None,
                 sort_by: None,
                 sort_order: SortOrder::Asc,
@@ -625,6 +712,7 @@ mod tests {
             show_max_line_length: false,
             show_headings: true,
             human_readable: false,
+            self_profile: false,
             jobs: None,
             sort_by: None,
             sort_order: SortOrder::Asc,
@@ -652,6 +740,7 @@ mod tests {
             show_max_line_length: false,
             show_headings: true,
             human_readable: false,
+            self_profile: false,
             jobs: None,
             sort_by: None,
             sort_order: SortOrder::Asc,
@@ -668,26 +757,28 @@ mod tests {
     #[test]
     fn sort_rows_keeps_total_out_of_sorted_rows() {
         let mut rows = vec![
-            (
-                Counts {
+            OutputRow {
+                counts: Counts {
                     lines: 2,
                     words: 0,
                     chars: 0,
                     bytes: 20,
                     max_line_length: 0,
                 },
-                Some("b.txt"),
-            ),
-            (
-                Counts {
+                duration: None,
+                label: Some("b.txt"),
+            },
+            OutputRow {
+                counts: Counts {
                     lines: 1,
                     words: 0,
                     chars: 0,
                     bytes: 10,
                     max_line_length: 0,
                 },
-                Some("a.txt"),
-            ),
+                duration: None,
+                label: Some("a.txt"),
+            },
         ];
         let config = Config {
             show_lines: true,
@@ -697,6 +788,7 @@ mod tests {
             show_max_line_length: false,
             show_headings: true,
             human_readable: false,
+            self_profile: false,
             jobs: None,
             sort_by: Some(SortBy::Bytes),
             sort_order: SortOrder::Desc,
@@ -708,9 +800,61 @@ mod tests {
 
         assert_eq!(
             rows.into_iter()
-                .map(|(_, label)| label.unwrap())
+                .map(|row| row.label.unwrap())
                 .collect::<Vec<_>>(),
             vec!["b.txt", "a.txt"]
+        );
+    }
+
+    #[test]
+    fn sort_rows_can_sort_by_duration() {
+        let mut rows = vec![
+            OutputRow {
+                counts: Counts {
+                    lines: 2,
+                    words: 0,
+                    chars: 0,
+                    bytes: 20,
+                    max_line_length: 0,
+                },
+                duration: Some(Duration::from_millis(20)),
+                label: Some("slow.txt"),
+            },
+            OutputRow {
+                counts: Counts {
+                    lines: 1,
+                    words: 0,
+                    chars: 0,
+                    bytes: 10,
+                    max_line_length: 0,
+                },
+                duration: Some(Duration::from_millis(10)),
+                label: Some("fast.txt"),
+            },
+        ];
+        let config = Config {
+            show_lines: true,
+            show_words: false,
+            show_chars: false,
+            show_bytes: true,
+            show_max_line_length: false,
+            show_headings: true,
+            human_readable: false,
+            self_profile: true,
+            jobs: None,
+            sort_by: Some(SortBy::Duration),
+            sort_order: SortOrder::Asc,
+            globs: Vec::new(),
+            files: Vec::new(),
+        };
+
+        sort_rows(&config, &mut rows);
+
+        assert_eq!(
+            rows.into_iter()
+                .map(|row| row.label.unwrap())
+                .collect::<Vec<_>>(),
+            vec!["fast.txt", "slow.txt"]
         );
     }
 
@@ -734,6 +878,7 @@ mod tests {
                 max_line_length: false,
             },
             Some(2),
+            false,
         );
 
         assert_eq!(
@@ -746,7 +891,7 @@ mod tests {
         assert_eq!(
             file_counts
                 .into_iter()
-                .map(|file_count| file_count.result.unwrap())
+                .map(|file_count| file_count.result.unwrap().counts)
                 .collect::<Vec<_>>(),
             vec![
                 Counts {

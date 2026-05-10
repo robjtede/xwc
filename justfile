@@ -54,7 +54,8 @@ fmt:
 
 # Generate benchmark fixture files
 [arg("size", long="size", help="fixture sizes, e.g. '1K 10M 500M'")]
+[arg("long_line_size", long="long-line-size", help="long-line fixture sizes, e.g. '100M'")]
 [arg("block_size", long="block-size", help="reusable generation block size")]
 [arg("chunk_size", long="chunk-size", help="simulated read chunk size for split fixtures")]
-fixtures size="1K 10K 100K 1M 10M 100M 500M" chunk_size="65536" block_size="1048576":
-    XWC_FIXTURE_SIZES='{{ size }}' XWC_CHUNK_SIZE='{{ chunk_size }}' XWC_BLOCK_SIZE='{{ block_size }}' benches/fixtures/generate.sh
+fixtures size="1K 10K 100K 1M 10M 100M 500M" long_line_size="1K 10K 100K 1M 10M 100M 500M" chunk_size="65536" block_size="1048576":
+    XWC_FIXTURE_SIZES='{{ size }}' XWC_LONG_LINE_FIXTURE_SIZES='{{ long_line_size }}' XWC_CHUNK_SIZE='{{ chunk_size }}' XWC_BLOCK_SIZE='{{ block_size }}' benches/fixtures/generate.sh

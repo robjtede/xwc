@@ -4,7 +4,8 @@ set -eEuo pipefail
 
 fixture_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 
-fixture_sizes="${XWC_FIXTURE_SIZES:-1K 10K 100K 1M 10M 100M 500M}"
+fixture_sizes="${XWC_FIXTURE_SIZES-1K 10K 100K 1M 10M 100M 500M}"
+long_line_fixture_sizes="${XWC_LONG_LINE_FIXTURE_SIZES-1K 10K 100K 1M 10M 100M 500M}"
 chunk_size="${XWC_CHUNK_SIZE:-65536}"
 block_size="${XWC_BLOCK_SIZE:-1048576}"
 
@@ -151,6 +152,29 @@ write_split_invalid_utf8_fixture() {
     done
 }
 
+write_random_base64_long_line_fixture() {
+    local name="$1"
+    local byte_count="$2"
+    local path="$fixture_dir/$name"
+    local raw_byte_count actual_size
+
+    if ((byte_count % 4 != 0)); then
+        printf 'Random base64 long-line fixture size must be divisible by 4: %s bytes\n' "$byte_count" >&2
+        exit 1
+    fi
+
+    raw_byte_count="$((byte_count * 3 / 4))"
+
+    printf 'Generating %s (%s bytes)\n' "$name" "$byte_count"
+    dd if=/dev/urandom bs="$raw_byte_count" count=1 2>/dev/null | base64 | tr -d '\n' >"$path"
+
+    actual_size="$(file_size "$path")"
+    if ((actual_size != byte_count)); then
+        printf 'Generated %s with %s bytes, expected %s bytes\n' "$name" "$actual_size" "$byte_count" >&2
+        exit 1
+    fi
+}
+
 tmp_dir="$(mktemp -d)"
 trap 'rm -rf "$tmp_dir"' EXIT
 
@@ -220,5 +244,13 @@ for size in $fixture_sizes; do
     write_split_invalid_utf8_fixture "split-invalid-utf8-$label.txt" "$bytes"
 done
 
+for size in $long_line_fixture_sizes; do
+    bytes="$(parse_size "$size")"
+    label="$(size_label "$size")"
+
+    write_random_base64_long_line_fixture "random-base64-long-line-$label.txt" "$bytes"
+done
+
 printf 'Generated fixture sizes: %s\n' "$fixture_sizes"
+printf 'Generated long-line fixture sizes: %s\n' "$long_line_fixture_sizes"
 printf 'Generated fixtures in %s\n' "$fixture_dir"

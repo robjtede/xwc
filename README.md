@@ -44,8 +44,11 @@ Options:
 - `-M`, `--include-chars`: include the UTF-8 character count in the default output columns.
 - `--include-longest-line`: include the longest line length in the default output columns.
 - `-h`, `--human-readable`: print byte counts with human-readable units and use the `size` heading.
+- `--self-profile`: include per-input counting duration in the output.
 - `-j`, `--jobs <N>`: set the worker count for multiple input files. By default, `xwc` starts parallel counting after 3 input files.
 - `--glob <PATTERN>`: add files matching a glob pattern. Can be used more than once.
+- `--sort-by <COLUMN>`: sort file rows by `lines`, `words`, `chars`, `max-line`, `bytes`, `file`, or `duration`.
+- `--sort-order <ORDER>`: set output sort order to `asc` or `desc`.
 - `--help`: print help.
 
 Examples:
@@ -89,24 +92,37 @@ lines  bytes  file
 829    20775  total
 ```
 
+## Performance
+
+Some basic `hyperfine` results `xwc` against `wc`:
+
+| Case                             | `xwc` is ...    |
+| -------------------------------- | --------------- |
+| 4 KiB single file, lines + bytes | slightly slower |
+| 1 MiB single file, lines only    | faster          |
+| 64 MiB single file, bytes only   | slightly slower |
+| 64 MiB single file, words        | faster          |
+| 8 MiB UTF-8 file, chars          | much faster     |
+| 16 x 64 KiB files, lines + bytes | tied            |
+| 8 x 8 MiB files, lines + bytes   | much faster     |
+| 8 x 8 MiB files, `xwc -j1`       | much faster     |
+
 ## Development
 
-Run the binary through Cargo:
-
-```console
-$ cargo run -- [OPTIONS] [FILE]...
-```
-
-Or use the Just proxy recipe:
+Just:
 
 ```console
 $ just xwc --include-words Cargo.toml
 ```
 
+Cargo:
+
+```console
+$ cargo run -- [OPTIONS] [FILE]...
+```
+
 Common development recipes:
 
 ```console
-$ just fmt
-$ just check
-$ just test-no-coverage
+$ just fmt check test-no-coverage
 ```

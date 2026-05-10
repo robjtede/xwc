@@ -112,6 +112,60 @@ fn human_readable_default_output_uses_size_heading() {
 }
 
 #[test]
+fn self_profile_adds_a_duration_column() {
+    let mut cmd = Command::cargo_bin("xwc").unwrap();
+
+    let assert = cmd
+        .arg("--self-profile")
+        .write_stdin("one two\nthree\n")
+        .assert()
+        .success();
+    let stdout = String::from_utf8(assert.get_output().stdout.clone()).unwrap();
+    let lines = stdout.lines().collect::<Vec<_>>();
+    let fields = lines[1].split_whitespace().collect::<Vec<_>>();
+
+    assert_eq!(lines[0], "lines  bytes  duration");
+    assert_eq!(fields[0], "2");
+    assert_eq!(fields[1], "14");
+    assert!(
+        fields[2].ends_with("ns")
+            || fields[2].ends_with("us")
+            || fields[2].ends_with("ms")
+            || fields[2].ends_with('s')
+    );
+}
+
+#[test]
+fn self_profile_places_duration_after_file_column() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("a.txt");
+    fs::write(&path, "one\n").unwrap();
+    let path = path.to_string_lossy();
+    let mut cmd = Command::cargo_bin("xwc").unwrap();
+
+    let assert = cmd
+        .arg("--self-profile")
+        .arg(path.as_ref())
+        .assert()
+        .success();
+    let stdout = String::from_utf8(assert.get_output().stdout.clone()).unwrap();
+    let lines = stdout.lines().collect::<Vec<_>>();
+    let headings = lines[0].split_whitespace().collect::<Vec<_>>();
+    let fields = lines[1].split_whitespace().collect::<Vec<_>>();
+
+    assert_eq!(headings, vec!["lines", "bytes", "file", "duration"]);
+    assert_eq!(fields[0], "1");
+    assert_eq!(fields[1], "4");
+    assert_eq!(fields[2], path);
+    assert!(
+        fields[3].ends_with("ns")
+            || fields[3].ends_with("us")
+            || fields[3].ends_with("ms")
+            || fields[3].ends_with('s')
+    );
+}
+
+#[test]
 fn glob_option_counts_matching_files() {
     let directory = tempfile::tempdir().unwrap();
     let path_b = directory.path().join("b.txt");
