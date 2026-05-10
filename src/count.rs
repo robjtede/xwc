@@ -3,9 +3,18 @@ use std::{
     mem, str,
 };
 
+use arrayvec::ArrayVec;
 use memchr::memchr_iter;
 
 const BUFFER_SIZE: usize = 64 * 1024;
+const MAX_UTF8_LEN: usize = 4;
+
+type PendingUtf8 = ArrayVec<u8, MAX_UTF8_LEN>;
+
+enum Utf8Segment<'a> {
+    Valid(&'a str),
+    Invalid,
+}
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct Counts {
@@ -27,17 +36,17 @@ pub struct CountOptions {
 #[derive(Debug, Default)]
 struct WordState {
     in_word: bool,
-    pending_utf8: Vec<u8>,
+    pending_utf8: PendingUtf8,
 }
 
 #[derive(Debug, Default)]
 struct CharState {
-    pending_utf8: Vec<u8>,
+    pending_utf8: PendingUtf8,
 }
 
 #[derive(Debug, Default)]
 struct LineLengthState {
-    pending_utf8: Vec<u8>,
+    pending_utf8: PendingUtf8,
     current_line_length: u64,
 }
 
@@ -103,20 +112,24 @@ fn bytecount_newlines(buffer: &[u8]) -> usize {
 
 fn count_chars(buffer: &[u8], state: &mut CharState) -> usize {
     let mut chars = 0;
-    let combined;
-
-    let buffer = if state.pending_utf8.is_empty() {
-        buffer
+    let offset = if state.pending_utf8.is_empty() {
+        0
     } else {
-        combined = {
-            let mut bytes = mem::take(&mut state.pending_utf8);
-            bytes.extend_from_slice(buffer);
-            bytes
-        };
-        &combined
+        let mut pending_utf8 = mem::take(&mut state.pending_utf8);
+        let offset = consume_pending_utf8(buffer, &mut pending_utf8, |segment| match segment {
+            Utf8Segment::Valid(valid) => {
+                chars += valid.chars().count();
+            }
+            Utf8Segment::Invalid => {
+                chars += 1;
+            }
+        })
+        .unwrap_or(buffer.len());
+        state.pending_utf8 = pending_utf8;
+        offset
     };
 
-    let mut offset = 0;
+    let mut offset = offset;
 
     while offset < buffer.len() {
         let remaining = buffer
@@ -145,7 +158,7 @@ fn count_chars(buffer: &[u8], state: &mut CharState) -> usize {
                     let pending = buffer
                         .get(offset..)
                         .expect("offset is guarded by the loop condition");
-                    state.pending_utf8.extend_from_slice(pending);
+                    state.pending_utf8.extend(pending.iter().copied());
                     break;
                 }
             }
@@ -157,20 +170,27 @@ fn count_chars(buffer: &[u8], state: &mut CharState) -> usize {
 
 fn count_words(buffer: &[u8], state: &mut WordState) -> usize {
     let mut words = 0;
-    let combined;
-
-    let buffer = if state.pending_utf8.is_empty() {
-        buffer
+    let offset = if state.pending_utf8.is_empty() {
+        0
     } else {
-        combined = {
-            let mut bytes = mem::take(&mut state.pending_utf8);
-            bytes.extend_from_slice(buffer);
-            bytes
-        };
-        &combined
+        let mut pending_utf8 = mem::take(&mut state.pending_utf8);
+        let offset = consume_pending_utf8(buffer, &mut pending_utf8, |segment| match segment {
+            Utf8Segment::Valid(valid) => {
+                words += count_words_in_str(valid, &mut state.in_word);
+            }
+            Utf8Segment::Invalid => {
+                if !state.in_word {
+                    words += 1;
+                    state.in_word = true;
+                }
+            }
+        })
+        .unwrap_or(buffer.len());
+        state.pending_utf8 = pending_utf8;
+        offset
     };
 
-    let mut offset = 0;
+    let mut offset = offset;
 
     while offset < buffer.len() {
         let remaining = buffer
@@ -202,7 +222,7 @@ fn count_words(buffer: &[u8], state: &mut WordState) -> usize {
                     let pending = buffer
                         .get(offset..)
                         .expect("offset is guarded by the loop condition");
-                    state.pending_utf8.extend_from_slice(pending);
+                    state.pending_utf8.extend(pending.iter().copied());
                     break;
                 }
             }
@@ -213,20 +233,24 @@ fn count_words(buffer: &[u8], state: &mut WordState) -> usize {
 }
 
 fn count_max_line_length(buffer: &[u8], state: &mut LineLengthState, max_line_length: &mut u64) {
-    let combined;
-
-    let buffer = if state.pending_utf8.is_empty() {
-        buffer
+    let offset = if state.pending_utf8.is_empty() {
+        0
     } else {
-        combined = {
-            let mut bytes = mem::take(&mut state.pending_utf8);
-            bytes.extend_from_slice(buffer);
-            bytes
-        };
-        &combined
+        let mut pending_utf8 = mem::take(&mut state.pending_utf8);
+        let offset = consume_pending_utf8(buffer, &mut pending_utf8, |segment| match segment {
+            Utf8Segment::Valid(valid) => {
+                update_max_line_length(valid, state, max_line_length);
+            }
+            Utf8Segment::Invalid => {
+                state.current_line_length += 1;
+            }
+        })
+        .unwrap_or(buffer.len());
+        state.pending_utf8 = pending_utf8;
+        offset
     };
 
-    let mut offset = 0;
+    let mut offset = offset;
 
     while offset < buffer.len() {
         let remaining = buffer
@@ -255,9 +279,56 @@ fn count_max_line_length(buffer: &[u8], state: &mut LineLengthState, max_line_le
                     let pending = buffer
                         .get(offset..)
                         .expect("offset is guarded by the loop condition");
-                    state.pending_utf8.extend_from_slice(pending);
+                    state.pending_utf8.extend(pending.iter().copied());
                     break;
                 }
+            }
+        }
+    }
+}
+
+fn consume_pending_utf8(
+    buffer: &[u8],
+    pending: &mut PendingUtf8,
+    mut consume: impl FnMut(Utf8Segment<'_>),
+) -> Option<usize> {
+    let mut combined = PendingUtf8::new();
+    combined.extend(pending.drain(..));
+    let pending_len = combined.len();
+
+    let mut consumed = 0;
+
+    loop {
+        match str::from_utf8(&combined) {
+            Ok(valid) => {
+                consume(Utf8Segment::Valid(valid));
+                return Some(combined.len() - pending_len);
+            }
+            Err(error) if error.error_len().is_some() => {
+                let valid_end = error.valid_up_to();
+                let invalid_end = valid_end + error.error_len()?;
+                if valid_end > 0 {
+                    let valid_bytes = combined.get(..valid_end)?;
+                    let valid = str::from_utf8(valid_bytes)
+                        .expect("valid_up_to must split at a UTF-8 boundary");
+                    consume(Utf8Segment::Valid(valid));
+                }
+                consume(Utf8Segment::Invalid);
+
+                return Some(invalid_end.saturating_sub(pending_len));
+            }
+            Err(_) if consumed == buffer.len() => {
+                pending.extend(combined);
+                return None;
+            }
+            Err(_) if combined.len() == MAX_UTF8_LEN => {
+                consume(Utf8Segment::Invalid);
+                return Some(combined.len() - pending_len);
+            }
+            Err(_) => {
+                let byte = buffer.get(consumed)?;
+                combined.push(*byte);
+                consumed += 1;
             }
         }
     }
@@ -441,5 +512,33 @@ mod tests {
 
         assert_eq!(count_chars(&input[..4], &mut state), 1);
         assert_eq!(count_chars(&input[4..], &mut state), 4);
+    }
+
+    #[test]
+    fn reprocesses_bytes_after_invalid_pending_utf8_for_chars() {
+        let mut state = CharState::default();
+
+        assert_eq!(count_chars(&[0xe2], &mut state), 0);
+        assert_eq!(count_chars(b"(a", &mut state), 3);
+    }
+
+    #[test]
+    fn reprocesses_bytes_after_invalid_pending_utf8_for_words() {
+        let mut state = WordState::default();
+
+        assert_eq!(count_words(&[0xe2], &mut state), 0);
+        assert_eq!(count_words(b" a", &mut state), 2);
+    }
+
+    #[test]
+    fn reprocesses_bytes_after_invalid_pending_utf8_for_line_length() {
+        let mut state = LineLengthState::default();
+        let mut max_line_length = 0;
+
+        count_max_line_length(&[0xe2], &mut state, &mut max_line_length);
+        count_max_line_length(b"\nabc", &mut state, &mut max_line_length);
+
+        assert_eq!(max_line_length, 1);
+        assert_eq!(state.current_line_length, 3);
     }
 }

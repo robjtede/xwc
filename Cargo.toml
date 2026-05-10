@@ -9,6 +9,7 @@ repository = "https://github.com/robjtede/xwc"
 include = ["Cargo.lock", "Cargo.toml", "LICENSE", "README.md", "src/**/*", "tests/**/*"]
 
 [dependencies]
+arrayvec = "0.7"
 bytesize = "2"
 clap = { version = "4", features = ["derive"] }
 glob = "0.3"
