@@ -3,6 +3,11 @@
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-26.05";
     nixpkgs-unstable.url = "github:NixOS/nixpkgs/nixos-unstable";
     flake-parts.url = "github:hercules-ci/flake-parts";
+    x52 = {
+      url = "github:x52dev/nix";
+      inputs.nixpkgs.follows = "nixpkgs";
+      inputs.flake-parts.follows = "flake-parts";
+    };
   };
 
   outputs =
@@ -18,6 +23,7 @@
         {
           pkgs,
           config,
+          inputs',
           lib,
           system,
           ...
@@ -31,12 +37,13 @@
           devShells.default = pkgs.mkShell {
             packages = [
               config.formatter
+              inputs'.x52.packages.x52-release-tools
               pkgs.cargo-machete
               pkgs.cargo-nextest
               pkgs.cargo-watch
               pkgs.fd
               pkgsUnstable.just
-              pkgs.nodePackages.prettier
+              pkgs.prettier
               pkgs.taplo
             ]
             ++ lib.optionals pkgs.stdenv.isDarwin [
