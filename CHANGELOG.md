@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.7.1
+
+- No significant changes since `Added`.
+
 ## Added
 
 - Add `--longest-line` flag.
