@@ -55,14 +55,18 @@ jobs:
         run: just doc
 
   project-format:
+    name: Project format (Magic Nix Cache)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Install Nix
-        uses: cachix/install-nix-action@630ae543ea3a38a9a4166f03376c02c50f408342 # v31.11.0
+      - name: Install Determinate Nix
+        uses: DeterminateSystems/determinate-nix-action@2a0be2498974c2b6327e19780488744384637d88 # v3.21.7
         with:
-          github_access_token: ${{ secrets.GITHUB_TOKEN }}
+          extra-conf: lazy-trees = true
+
+      - name: Set up Magic Nix Cache
+        uses: DeterminateSystems/magic-nix-cache-action@55718cd9ebf1737a061487d5ada21abf31e99a98 # main
 
       - name: Install Rust (nightly)
         uses: actions-rust-lang/setup-rust-toolchain@46268bd060767258de96ed93c1251119784f2ab6 # v1.16.1
@@ -70,11 +74,8 @@ jobs:
           toolchain: nightly
           components: clippy,rustfmt
 
-      - name: Enter Nix devshell
-        uses: nicknovitski/nix-develop@9be7cfb4b10451d3390a75dc18ad0465bed4932a # v1.2.1
-
       - name: Format project
-        run: just fmt
+        run: nix develop --command just fmt
 
       - name: Check formatting diff
         run: git diff --exit-code
