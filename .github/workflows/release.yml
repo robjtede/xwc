@@ -70,7 +70,7 @@ jobs:
         if: ${{ steps.release-plz.outputs.releases_created == 'true' }}
         env:
           GH_TOKEN: ${{ github.token }}
-        run: x52-comment-release-pr '${{ steps.release-plz.outputs.releases }}' '<!-- xwc:draft-release-link -->' '${{ github.sha }}'
+        run: x52-comment-release-pr '${{ steps.release-plz.outputs.releases }}' '${{ github.sha }}'
 
   upload-assets:
     name: Upload release assets
@@ -154,4 +154,4 @@ jobs:
       - name: Comment on release PR
         env:
           GH_TOKEN: ${{ github.token }}
-        run: x52-comment-release-assets-uploaded '${{ needs.release.outputs.releases }}' '<!-- xwc:release-assets-uploaded -->' '${{ github.sha }}'
+        run: x52-comment-release-assets-uploaded '${{ needs.release.outputs.releases }}' '${{ github.sha }}'
