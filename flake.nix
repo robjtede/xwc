@@ -50,6 +50,10 @@
               pkgs.pkgsBuildHost.libiconv
             ];
           };
+
+          devShells.release = pkgs.mkShell {
+            packages = [ inputs'.x52.packages.x52-release-tools ];
+          };
         };
     };
 }
