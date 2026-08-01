@@ -1080,7 +1080,7 @@ dependencies = [
 
 [[package]]
 name = "xwc"
-version = "0.7.1"
+version = "0.7.2"
 dependencies = [
  "arrayvec",
  "assert_cmd",
