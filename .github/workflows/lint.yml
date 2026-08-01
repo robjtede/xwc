@@ -55,6 +55,7 @@ jobs:
         run: just doc
 
   project-format:
+    name: Project format (direct Nix command)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -70,11 +71,8 @@ jobs:
           toolchain: nightly
           components: clippy,rustfmt
 
-      - name: Enter Nix devshell
-        uses: nicknovitski/nix-develop@9be7cfb4b10451d3390a75dc18ad0465bed4932a # v1.2.1
-
       - name: Format project
-        run: just fmt
+        run: nix develop --command just fmt
 
       - name: Check formatting diff
         run: git diff --exit-code
