@@ -34,6 +34,16 @@
         {
           formatter = pkgs.nixfmt;
 
+          devShells.ci-format = pkgs.mkShell {
+            packages = [
+              config.formatter
+              pkgs.fd
+              pkgsUnstable.just
+              pkgs.prettier
+              pkgs.taplo
+            ];
+          };
+
           devShells.default = pkgs.mkShell {
             packages = [
               config.formatter
