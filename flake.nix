@@ -1,7 +1,6 @@
 {
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-26.05";
-    nixpkgs-unstable.url = "github:NixOS/nixpkgs/nixos-unstable";
     flake-parts.url = "github:hercules-ci/flake-parts";
     x52 = {
       url = "github:x52dev/nix";
@@ -25,12 +24,8 @@
           config,
           inputs',
           lib,
-          system,
           ...
         }:
-        let
-          pkgsUnstable = import inputs.nixpkgs-unstable { inherit system; };
-        in
         {
           formatter = pkgs.nixfmt;
 
@@ -42,7 +37,7 @@
               pkgs.cargo-nextest
               pkgs.cargo-watch
               pkgs.fd
-              pkgsUnstable.just
+              pkgs.just
               pkgs.prettier
               pkgs.taplo
             ]
