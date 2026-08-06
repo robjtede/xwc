@@ -38,7 +38,7 @@ jobs:
         run: cargo codspeed build --all-features
 
       - name: Run benchmarks
-        uses: CodSpeedHQ/action@a4a36bb07c0638b0b4ca52bf1f3dad1b4289e52f # v4.18.1
+        uses: CodSpeedHQ/action@88472375d0a4572cf70a9f1fe3a4e0ab8da1b924 # v5.0.1
         env:
           DIVAN_MIN_TIME: "1"
         with:
