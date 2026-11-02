@@ -124,5 +124,5 @@ $ cargo run -- [OPTIONS] [FILE]...
 Common development recipes:
 
 ```console
-$ just fmt check test-no-coverage
+$ just fmt check test
 ```
